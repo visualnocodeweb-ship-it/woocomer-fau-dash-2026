@@ -307,4 +307,4 @@ def get_single_order_by_wc_id(wc_order_id: int, db: Session = Depends(get_db)):
     return db_order
 
 # --- Mount Static Files ---
-app.mount("/", StaticFiles(directory="../frontend/client/dist", html=True), name="static")
+app.mount("/", StaticFiles(directory="frontend/client/dist", html=True), name="static")
