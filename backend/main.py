@@ -6,7 +6,7 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 from .database import Base, engine, get_db, SessionLocal
 from . import models
-import crud
+from . import crud
 import schemas
 from woocommerce_service import WooCommerceService
 from typing import List, Optional
