@@ -4,14 +4,19 @@ import time
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
-from .database import Base, engine, get_db, SessionLocal
-from . import models
-from . import crud
-from . import schemas
-from .woocommerce_service import WooCommerceService
+from database import Base, engine, get_db, SessionLocal
+import models
+import crud
+import schemas
+from woocommerce_service import WooCommerceService
 from typing import List, Optional
 from datetime import date, datetime, timedelta
 from fastapi.middleware.cors import CORSMiddleware
+from dotenv import load_dotenv # Added
+import os # Added
+
+# Load environment variables from .env file at the application entry point
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '.env')) # Added
 
 # --- Constants ---
 SYNC_INTERVAL_SECONDS = 120  # 2 minutes
@@ -302,4 +307,4 @@ def get_single_order_by_wc_id(wc_order_id: int, db: Session = Depends(get_db)):
     return db_order
 
 # --- Mount Static Files ---
-app.mount("/", StaticFiles(directory="frontend/client/dist", html=True), name="static")
+app.mount("/", StaticFiles(directory="../frontend/client/dist", html=True), name="static")

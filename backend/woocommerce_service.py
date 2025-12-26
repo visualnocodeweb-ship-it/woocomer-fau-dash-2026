@@ -1,9 +1,9 @@
 import os
 from woocommerce import API
-from dotenv import load_dotenv
+# from dotenv import load_dotenv # Removed
 import time
 
-load_dotenv()
+# load_dotenv() # Removed
 
 class WooCommerceService:
     def __init__(self):
