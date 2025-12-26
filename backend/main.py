@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from .database import Base, engine, get_db, SessionLocal
 from . import models
 from . import crud
-import schemas
+from . import schemas
 from woocommerce_service import WooCommerceService
 from typing import List, Optional
 from datetime import date, datetime, timedelta
