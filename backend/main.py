@@ -5,7 +5,7 @@ from fastapi import FastAPI, Depends, HTTPException
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 from .database import Base, engine, get_db, SessionLocal
-import models
+from . import models
 import crud
 import schemas
 from woocommerce_service import WooCommerceService
