@@ -26,6 +26,9 @@ import DailyRevenueChart from '../components/DailyRevenueChart';
 import MonthlyRevenueChart from '../components/MonthlyRevenueChart';
 import LatestOrdersTable from '../components/LatestOrdersTable';
 import ReportGenerator from '../components/ReportGenerator';
+
+import SheetsCountButton from '../components/SheetsCountButton'; // Reintroduced for consolidated count
+import CategoryStatCard from '../components/CategoryStatCard'; // New import for category stats
 import axios from 'axios';
 
 // Helper component for Tab content
@@ -75,6 +78,8 @@ function DashboardPage() {
     const [categoriesLoading, setCategoriesLoading] = useState(true);
     const [regionsData, setRegionsData] = useState([]);
     const [regionsLoading, setRegionsLoading] = useState(true);
+    const [sheetsCountsData, setSheetsCountsData] = useState(null); // New state for sheets counts
+    const [sheetsCountsLoading, setSheetsCountsLoading] = useState(true); // New state for sheets loading
     const [anchorEl, setAnchorEl] = useState(null); // State for mobile menu
     const API_URL = import.meta.env.VITE_API_URL || '';
     
@@ -105,8 +110,8 @@ function DashboardPage() {
   const fetchCategories = async () => {
     try {
       setCategoriesLoading(true);
-      const response = await axios.get(`${API_URL}/api/stats/product_counts?start_date=2025-10-15`);
-      const formattedData = response.data.map(item => ({ name: item.name, value: item.count }));
+      const response = await axios.get(`${API_URL}/api/combined-category-stats`);
+      const formattedData = response.data.map(item => ({ name: item.name, value: item.value }));
       setCategoriesData(formattedData);
     } catch (error) { console.error('Error fetching categories:', error); } 
     finally { setCategoriesLoading(false); }
@@ -121,16 +126,30 @@ function DashboardPage() {
     finally { setRegionsLoading(false); }
   };
 
+  const fetchSheetsCounts = async () => { // New fetch function
+    try {
+        setSheetsCountsLoading(true);
+        const response = await axios.get(`${API_URL}/api/sheets-counts`);
+        setSheetsCountsData(response.data);
+    } catch (error) {
+        console.error('Error fetching Google Sheets counts:', error);
+    } finally {
+        setSheetsCountsLoading(false);
+    }
+  };
+
   useEffect(() => {
     fetchDailyCounts();
     fetchDailyRevenue();
     fetchCategories();
     fetchRegions();
+    fetchSheetsCounts(); // Call new fetch function
     const intervalId = setInterval(() => {
         fetchDailyCounts();
         fetchDailyRevenue();
         fetchCategories();
         fetchRegions();
+        fetchSheetsCounts(); // Refresh new fetch function
     }, 120000);
     return () => clearInterval(intervalId);
   }, []);
@@ -161,13 +180,41 @@ function DashboardPage() {
           <Grid item xs={12} sm={6} md={4}><CompletedOrdersCard /></Grid>
           <Grid item xs={12} sm={6} md={4}><RecentOrdersCard /></Grid>
           <Grid item xs={12} sm={12} md={4}><JubiladoOrdersCard /></Grid>
+
+
         </Grid>
         <Box mt={5}>
           <Box mb={4}><DailyCountsChart data={dailyCountsData} loading={dailyCountsLoading} title="Permisos por Día (desde 15/10/2025)" /></Box>
           <Box><MonthlyCountsChart /></Box>
         </Box>
       </TabPanel>
-      <TabPanel value={value} index={1}><CategoriesChart data={categoriesData} loading={categoriesLoading} title="Permisos por Tipo (desde 15/10/25)" /></TabPanel>
+      <TabPanel value={value} index={1}>
+        <CategoriesChart data={categoriesData} loading={categoriesLoading} title="Permisos por Tipo (desde 15/10/25)" />
+        <Box sx={{ mt: 4 }}>
+          <SheetsCountButton data={sheetsCountsData} loading={sheetsCountsLoading} consolidatedCategoryName="Residentes mayores de 65 años, jubilados, menores hasta 12 años y personas con discapacidad" /> {/* Consolidated count button */}
+        </Box>
+
+        <Grid container spacing={4} sx={{ mt: 4 }}> {/* New grid for category buttons */}
+            {categoriesData.map((category, index) => (
+                category.name !== "Residentes mayores de 65 años, jubilados, menores hasta 12 años y personas con discapacidad" && (
+                    <Grid item xs={12} sm={6} md={4} key={index}>
+                        <CategoryStatCard name={category.name} value={category.value} loading={categoriesLoading} />
+                    </Grid>
+                )
+            ))}
+            {/* Specific button for "Permisos Discapacidad" from Google Sheets */}
+            {sheetsCountsData && sheetsCountsData.categorized_sheets_counts && (
+                <Grid item xs={12} sm={6} md={4} key="permisos-discapacidad">
+                    <CategoryStatCard 
+                        name="Permisos Discapacidad" 
+                        value={sheetsCountsData.categorized_sheets_counts["Permisos Discapacidad"] || 0} 
+                        loading={sheetsCountsLoading} 
+                    />
+                </Grid>
+            )}
+        </Grid>
+
+      </TabPanel>
       <TabPanel value={value} index={2}><RegionsChart data={regionsData} loading={regionsLoading} title="Cantidad por Región de Pesca" /></TabPanel>
       <TabPanel value={value} index={3}>
         <Box mb={4}><TotalRevenueCard /></Box>

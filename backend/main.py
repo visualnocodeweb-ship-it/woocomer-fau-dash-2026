@@ -4,24 +4,33 @@ import time
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
-from .database import Base, engine, get_db, SessionLocal
-from . import models
-from . import crud
-from . import schemas
-from .woocommerce_service import WooCommerceService
+from database import SessionLocal, engine, get_db
+import crud, models, schemas
+from woocommerce_service import WooCommerceService
 from typing import List, Optional
 from datetime import date, datetime, timedelta
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv # Added
 import os # Added
 
+from google_sheets_service import GoogleSheetsService
+
 # Load environment variables from .env file at the application entry point
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '.env')) # Added
 
 # --- Constants ---
 SYNC_INTERVAL_SECONDS = 120  # 2 minutes
+SHEETS_SYNC_INTERVAL_SECONDS = 300 # 5 minutes for sheets sync
 
-Base.metadata.create_all(bind=engine)
+# Global variable to store sheets data
+sheets_sync_data = {
+    "updated_sheet_count": 0,
+    "static_sheet_count": 0,
+    "last_sync_time": None
+}
+
+# Initialize GoogleSheetsService
+google_sheets_service = GoogleSheetsService()
 
 app = FastAPI(
     title="WooCommerce Sync API",
@@ -109,6 +118,32 @@ def run_sync_periodically():
         logging.info(f"Siguiente sincronización automática en {SYNC_INTERVAL_SECONDS} segundos.")
         time.sleep(SYNC_INTERVAL_SECONDS)
 
+def sync_google_sheets_job():
+    """
+    Job to be run in the background thread for Google Sheets.
+    """
+    global sheets_sync_data
+    logging.warning("Background Google Sheets sync job starting a new execution.")
+    try:
+        sheets_data = google_sheets_service.get_categorized_sheets_data()
+        sheets_sync_data["updated_sheet_total_count"] = sheets_data["updated_sheet_total_count"]
+        sheets_sync_data["static_sheet_total_count"] = sheets_data["static_sheet_total_count"]
+        sheets_sync_data["categorized_sheets_counts"] = sheets_data["categorized_sheets_counts"]
+        sheets_sync_data["last_sync_time"] = datetime.now()
+        logging.warning(f"Google Sheets sync completed. Updated Total: {sheets_data['updated_sheet_total_count']}, Static Total: {sheets_data['static_sheet_total_count']}")
+    except Exception as e:
+        logging.error(f"Error during Google Sheets background sync job: {e}")
+    logging.warning("Background Google Sheets sync job has finished its execution.")
+
+def run_google_sheets_sync_periodically():
+    """
+    Infinite loop to run the Google Sheets sync job periodically.
+    """
+    while True:
+        sync_google_sheets_job()
+        logging.info(f"Next automatic Google Sheets sync in {SHEETS_SYNC_INTERVAL_SECONDS} seconds.")
+        time.sleep(SHEETS_SYNC_INTERVAL_SECONDS)
+
 @app.on_event("startup")
 def startup_event():
     """
@@ -123,12 +158,76 @@ def startup_event():
     background_thread = threading.Thread(target=run_sync_periodically, daemon=True)
     background_thread.start()
 
+    # Start Google Sheets periodic sync
+    google_sheets_sync_thread = threading.Thread(target=run_google_sheets_sync_periodically, daemon=True)
+    google_sheets_sync_thread.start()
+
 
 # --- API Routes ---
 @app.get("/api")
 def read_root():
     """Endpoint raíz para verificar que la API está funcionando."""
     return {"message": "API de WooCommerce Sync está en línea"}
+
+@app.get("/api/sheets-counts")
+def get_sheets_counts():
+    """
+    Returns the latest counts from Google Sheets, including categorized data.
+    """
+    return {
+        "updated_sheet_total_count": sheets_sync_data["updated_sheet_total_count"],
+        "static_sheet_total_count": sheets_sync_data["static_sheet_total_count"],
+        "categorized_sheets_counts": sheets_sync_data["categorized_sheets_counts"],
+        "last_sync_time": sheets_sync_data["last_sync_time"].isoformat() if sheets_sync_data["last_sync_time"] else None
+    }
+
+@app.get("/api/combined-category-stats")
+def get_combined_category_stats(db: Session = Depends(get_db)):
+    """
+    Returns combined category statistics from WooCommerce and Google Sheets.
+    Google Sheets data will augment or override WooCommerce data for specific categories.
+    """
+    # 1. Get WooCommerce product counts
+    woocommerce_counts = crud.get_product_name_counts(db)
+    
+    # Initialize combined_stats with WooCommerce data, filtering the specific category
+    combined_stats = {}
+    excluded_from_woocommerce_list = [
+        "Residentes mayores de 65 años, jubilados, menores hasta 12 años y personas con discapacidad",
+        "Permiso residentes país mayores de 65 años, jubilados y pensionados"
+    ]
+    for item in woocommerce_counts:
+        if item['name'] not in excluded_from_woocommerce_list:
+            combined_stats[item['name']] = item['count']
+
+    # 2. Get Google Sheets consolidated count
+    google_sheets_categorized = sheets_sync_data["categorized_sheets_counts"]
+    consolidated_category_name = "Residentes mayores de 65 años, jubilados, menores hasta 12 años y personas con discapacidad"
+    consolidated_sheets_count = 0
+    if consolidated_category_name in google_sheets_categorized:
+        consolidated_sheets_count = int(google_sheets_categorized[consolidated_category_name])
+
+    # 3. Add the consolidated Google Sheets count to combined_stats
+    # This ensures it's always added, and won't be from WooCommerce if it existed there.
+    if consolidated_sheets_count > 0: # Only add if there's a count
+        combined_stats[consolidated_category_name] = consolidated_sheets_count
+
+    # 4. Add "Permisos Discapacidad" from Google Sheets
+    discapacidad_category_name = "Permisos Discapacidad"
+    discapacidad_sheets_count = 0
+    if discapacidad_category_name in google_sheets_categorized:
+        discapacidad_sheets_count = int(google_sheets_categorized[discapacidad_category_name])
+    
+    if discapacidad_sheets_count > 0:
+        combined_stats[discapacidad_category_name] = discapacidad_sheets_count
+            
+    # Convert to list of dicts for frontend chart
+    result = [{"name": name, "value": value} for name, value in combined_stats.items()]
+    
+    # Sort the result by value in descending order
+    result.sort(key=lambda item: item['value'], reverse=True)
+    
+    return result
 
 @app.post("/api/backfill-orders")
 def backfill_orders(request: schemas.DateRangeRequest, db: Session = Depends(get_db)):
@@ -307,4 +406,4 @@ def get_single_order_by_wc_id(wc_order_id: int, db: Session = Depends(get_db)):
     return db_order
 
 # --- Mount Static Files ---
-app.mount("/", StaticFiles(directory="frontend/client/dist", html=True), name="static")
+app.mount("/", StaticFiles(directory=os.path.join(os.path.dirname(__file__), "../frontend/client/dist"), html=True), name="static")
