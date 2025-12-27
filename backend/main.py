@@ -4,8 +4,8 @@ import time
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
-from database import SessionLocal, engine, get_db
-import crud, models, schemas
+from .database import SessionLocal, engine, get_db
+from . import crud, models, schemas
 from woocommerce_service import WooCommerceService
 from typing import List, Optional
 from datetime import date, datetime, timedelta
