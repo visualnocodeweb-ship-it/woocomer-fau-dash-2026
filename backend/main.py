@@ -6,14 +6,14 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 from .database import SessionLocal, engine, get_db
 from . import crud, models, schemas
-from woocommerce_service import WooCommerceService
+from .woocommerce_service import WooCommerceService
 from typing import List, Optional
 from datetime import date, datetime, timedelta
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv # Added
 import os # Added
 
-from google_sheets_service import GoogleSheetsService
+from .google_sheets_service import GoogleSheetsService
 
 # Load environment variables from .env file at the application entry point
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '.env')) # Added
