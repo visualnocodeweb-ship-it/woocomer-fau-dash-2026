@@ -4,18 +4,18 @@ import time
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
-from database import SessionLocal, engine, get_db
-import crud
-import models
-import schemas
-from woocommerce_service import WooCommerceService
+from backend.database import SessionLocal, engine, get_db
+from backend import crud
+from backend import models
+from backend import schemas
+from backend.woocommerce_service import WooCommerceService
 from typing import List, Optional
 from datetime import date, datetime, timedelta
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv # Added
 import os # Added
 
-from google_sheets_service import GoogleSheetsService
+from backend.google_sheets_service import GoogleSheetsService
 
 # Load environment variables from .env file at the application entry point
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '.env')) # Added
@@ -406,6 +406,17 @@ def get_single_order_by_wc_id(wc_order_id: int, db: Session = Depends(get_db)):
     if db_order is None:
         raise HTTPException(status_code=404, detail="Pedido no encontrado en nuestra base de datos.")
     return db_order
+
+@app.get("/api/debug/order-dates")
+def debug_order_dates(db: Session = Depends(get_db)):
+    all_orders_dates = crud.get_all_order_dates(db)
+    # Ahora all_orders_dates es una lista de diccionarios {'order_id': ..., 'date_created': ...}
+    unique_months = sorted(list(set([d['date_created'].strftime('%Y-%m') for d in all_orders_dates])))
+    
+    # Para ver los raw data sin los -3 hours ni nada, solo tal como está en la DB
+    raw_dates_with_ids = [{"order_id": d['order_id'], "date_created": d['date_created'].isoformat()} for d in all_orders_dates]
+    
+    return {"total_orders": len(all_orders_dates), "unique_months_processed": unique_months, "all_orders_dates_raw": raw_dates_with_ids}
 
 # --- Mount Static Files ---
 app.mount("/", StaticFiles(directory=os.path.join(os.path.dirname(__file__), "../frontend/client/dist"), html=True), name="static")

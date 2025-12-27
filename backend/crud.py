@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import func, cast, Date, desc, text
-import models
+from backend import models
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 
@@ -108,7 +108,7 @@ def get_daily_counts(db: Session, start_date: Optional[datetime] = None, end_dat
     """
     query = (
         db.query(
-            cast(models.Order.date_created + text("interval '-3 hours'"), Date).label("date"),
+            func.strftime('%Y-%m-%d', models.Order.date_created, '-3 hours').label("date"),
             func.count(models.Order.id).label("count"),
         )
         .filter(models.Order.status == "completed")
@@ -119,11 +119,11 @@ def get_daily_counts(db: Session, start_date: Optional[datetime] = None, end_dat
         query = query.filter(models.Order.date_created < end_date)
         
     result = (
-        query.group_by(cast(models.Order.date_created + text("interval '-3 hours'"), Date))
-        .order_by(cast(models.Order.date_created + text("interval '-3 hours'"), Date))
+        query.group_by(func.strftime('%Y-%m-%d', models.Order.date_created, '-3 hours'))
+        .order_by(func.strftime('%Y-%m-%d', models.Order.date_created, '-3 hours'))
         .all()
     )
-    return [{"date": row.date.isoformat(), "count": row.count} for row in result]
+    return [{"date": row.date, "count": row.count} for row in result]
 
 def get_monthly_counts(db: Session) -> List[Dict[str, Any]]:
     """
@@ -131,16 +131,15 @@ def get_monthly_counts(db: Session) -> List[Dict[str, Any]]:
     """
     result = (
         db.query(
-            func.date_trunc('month', models.Order.date_created + text("interval '-3 hours'")).label("date"),
+            func.strftime('%Y-%m', models.Order.date_created, '-3 hours').label("date"),
             func.count(models.Order.id).label("count"),
         )
         .filter(models.Order.status == "completed")
-        .group_by(func.date_trunc('month', models.Order.date_created + text("interval '-3 hours'")))
-        .order_by(func.date_trunc('month', models.Order.date_created + text("interval '-3 hours'")))
+        .group_by(func.strftime('%Y-%m', models.Order.date_created, '-3 hours'))
+        .order_by(func.strftime('%Y-%m', models.Order.date_created, '-3 hours'))
         .all()
     )
-    return [{"date": row.date.strftime('%Y-%m'), "count": row.count} for row in result]
-
+    return [{"date": row.date, "count": row.count} for row in result]
 def get_all_region_strings(db: Session) -> List[str]:
     """
     Gets all non-null 'region_pesca' strings from completed orders.
@@ -213,7 +212,7 @@ def get_daily_revenue(db: Session, start_date: Optional[datetime] = None, end_da
     """
     query = (
         db.query(
-            cast(models.Order.date_created + text("interval '-3 hours'"), Date).label("date"),
+            func.strftime('%Y-%m-%d', models.Order.date_created, '-3 hours').label("date"),
             func.sum(models.Order.total).label("revenue"),
         )
         .filter(models.Order.status == "completed")
@@ -224,28 +223,26 @@ def get_daily_revenue(db: Session, start_date: Optional[datetime] = None, end_da
         query = query.filter(models.Order.date_created < end_date)
 
     result = (
-        query.group_by(cast(models.Order.date_created + text("interval '-3 hours'"), Date))
-        .order_by(cast(models.Order.date_created + text("interval '-3 hours'"), Date))
+        query.group_by(func.strftime('%Y-%m-%d', models.Order.date_created, '-3 hours'))
+        .order_by(func.strftime('%Y-%m-%d', models.Order.date_created, '-3 hours'))
         .all()
     )
-    return [{"date": row.date.isoformat(), "revenue": row.revenue or 0} for row in result]
-
+    return [{"date": row.date, "revenue": row.revenue or 0} for row in result]
 def get_monthly_revenue(db: Session) -> List[Dict[str, Any]]:
     """
     Gets the sum of revenue grouped by month, adjusting for a -3 hour timezone offset.
     """
     result = (
         db.query(
-            func.date_trunc('month', models.Order.date_created + text("interval '-3 hours'")).label("date"),
+            func.strftime('%Y-%m', models.Order.date_created, '-3 hours').label("date"),
             func.sum(models.Order.total).label("revenue"),
         )
         .filter(models.Order.status == "completed")
-        .group_by(func.date_trunc('month', models.Order.date_created + text("interval '-3 hours'")))
-        .order_by(func.date_trunc('month', models.Order.date_created + text("interval '-3 hours'")))
+        .group_by(func.strftime('%Y-%m', models.Order.date_created, '-3 hours'))
+        .order_by(func.strftime('%Y-%m', models.Order.date_created, '-3 hours'))
         .all()
     )
-    return [{"date": row.date.strftime('%Y-%m'), "revenue": row.revenue or 0} for row in result]
-
+    return [{"date": row.date, "revenue": row.revenue or 0} for row in result]
 def get_latest_orders_summary(db: Session, limit: int = 50) -> List[Dict[str, Any]]:
     """
     Retrieves a summary of the latest orders.
@@ -261,3 +258,9 @@ def get_latest_orders_summary(db: Session, limit: int = 50) -> List[Dict[str, An
             "permission_type": order.line_item_name
         })
     return summary
+def get_all_order_dates(db: Session) -> List[Dict[str, Any]]:
+    """
+    Retrieves order_id and 'date_created' from all orders (no status filter).
+    """
+    orders_data = db.query(models.Order.order_id, models.Order.date_created).all()
+    return [{"order_id": o.order_id, "date_created": o.date_created} for o in orders_data if o.date_created is not None]
