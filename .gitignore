@@ -49,5 +49,5 @@ backend/credentials.json
 backend/.env
 frontend/client/.env
 sql_app.db
-temp_credentials.json
+credentials.json
 permiso de pesca para jubilados mayores de 65 años y niños menores de 12 años - permiso-de-pesca-jubilados-65-2025-12-26.csv

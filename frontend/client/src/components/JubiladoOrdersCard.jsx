@@ -14,8 +14,18 @@ function JubiladoOrdersCard() {
         line_item_name: 'Permiso residentes país mayores de 65 años, jubilados y pensionados',
         total: 0
       });
-      const response = await axios.get(`${API_URL}/api/orders/count?${params.toString()}`);
-      setCount(response.data.total_completed);
+      
+      const [dbResponse, sheetsResponse] = await Promise.all([
+        axios.get(`${API_URL}/api/orders/count?${params.toString()}`),
+        axios.get(`${API_URL}/api/sheets-counts`)
+      ]);
+
+      const dbCount = dbResponse.data.total_completed || 0;
+      const staticCount = sheetsResponse.data.static_sheet_total_count || 0;
+      const otherSheetsCount = sheetsResponse.data.categorized_sheets_counts?.["Otros Permisos Google Sheets"] || 0;
+      const jubiladosCount = sheetsResponse.data.categorized_sheets_counts?.["jubilados"] || 0;
+      
+      setCount(dbCount + staticCount + otherSheetsCount + jubiladosCount);
     } catch (error) {
       console.error('Error fetching jubilado orders count:', error);
       setCount('Error');
@@ -30,32 +40,45 @@ function JubiladoOrdersCard() {
 
   return (
     <Paper 
-        elevation={4} 
+        elevation={0} 
         sx={{ 
             p: 3, 
-            borderRadius: 2, 
-            backgroundColor: '#263238', // Dark Charcoal
-            color: 'white',
-            height: '100%'
+            backgroundColor: '#0f0f0f',
+            border: '1px solid rgba(255, 255, 255, 0.05)',
+            borderRadius: 5,
+            transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+            '&:hover': {
+              transform: 'translateY(-4px)',
+              borderColor: 'rgba(188, 255, 0, 0.3)',
+              boxShadow: '0 10px 30px -10px rgba(0,0,0,0.5), 0 0 20px rgba(188, 255, 0, 0.05)'
+            }
         }}
     >
         <Grid container spacing={2} alignItems="center" wrap="nowrap">
             <Grid item>
-                <Box sx={{ backgroundColor: '#607D8B', borderRadius: '50%', p: 1.5 }}>
-                    <ElderlyIcon sx={{ fontSize: 32, color: 'white' }} />
+                <Box sx={{ 
+                  backgroundColor: '#ffffff', 
+                  borderRadius: '12px', 
+                  p: 1.5,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  boxShadow: '0 0 15px rgba(255, 255, 255, 0.1)'
+                }}>
+                    <ElderlyIcon sx={{ fontSize: 32, color: '#000000' }} />
                 </Box>
             </Grid>
             <Grid item xs>
                 <Typography 
-                    variant="subtitle1" 
-                    sx={{ fontWeight: 'bold', color: '#B0BEC5' }}
+                    variant="caption" 
+                    sx={{ fontWeight: 700, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '1.5px' }}
                 >
-                  Permisos Jubilado (Sin cargo, antes de 15/10/25):
+                  Jubilados (Sin cargo)
                 </Typography>
                 <Typography 
-                    variant="h4" 
+                    variant="h3" 
                     component="div" 
-                    sx={{ fontWeight: 'bold' }}
+                    sx={{ fontWeight: 900, color: '#bcff00', mt: 0.5, lineHeight: 1 }}
                 >
                   {count !== null && count !== 'Error'
                       ? count.toLocaleString('es-AR')

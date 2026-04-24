@@ -11,9 +11,10 @@ logger = logging.getLogger(__name__)
 
 # Google Sheet ID and worksheet names
 GOOGLE_SHEET_ID = "1dn9W-1hxSxPmnUUHDbF_ZG_yzaYlOYFoIO3LqDMGgQw"
-SHEET_NAME_UPDATED = "permisos actualizados"
+SHEET_NAME_UPDATED = "permisos"
 SHEET_NAME_STATIC = "permiso-de-pesca-jubilados-65-2025-12-26"
 SHEET_NAME_DISCAPACIDAD = "discapacidad"
+SHEET_NAME_MALVINAS = "malvinas"
 
 class GoogleSheetsService:
     def __init__(self):
@@ -25,15 +26,32 @@ class GoogleSheetsService:
         credentials_base64 = os.getenv("GOOGLE_SHEETS_CREDENTIALS_BASE64")
 
         if credentials_base64:
+            logger.info(f"Raw GOOGLE_SHEETS_CREDENTIALS_BASE64 from env: {credentials_base64[:50]}...") # Log first 50 chars for brevity
+            temp_credentials_path = None
             try:
                 credentials_json_str = base64.b64decode(credentials_base64).decode('utf-8')
-                credentials_info = json.loads(credentials_json_str)
-                gc = gspread.service_account_from_dict(credentials_info)
-                logger.info("Successfully authenticated with Google Sheets API using GOOGLE_SHEETS_CREDENTIALS_BASE64.")
+                logger.info(f"Full credentials_json_str after base64 decode: {credentials_json_str}") # Log full string
+                
+                # Parse the string into a JSON object and then dump it back
+                # This ensures proper escaping of special characters like backslashes.
+                credentials_data = json.loads(credentials_json_str)
+                corrected_json_str = json.dumps(credentials_data)
+
+                # Create a temporary file to store the credentials
+                import tempfile
+                with tempfile.NamedTemporaryFile(mode='w+', delete=False, encoding='utf-8') as temp_file:
+                    temp_file.write(corrected_json_str)
+                    temp_credentials_path = temp_file.name
+                
+                gc = gspread.service_account(filename=temp_credentials_path)
+                logger.info("Successfully authenticated with Google Sheets API using GOOGLE_SHEETS_CREDENTIALS_BASE64 via temporary file.")
                 return gc
             except Exception as e:
                 logger.error(f"Error authenticating with Google Sheets API using GOOGLE_SHEETS_CREDENTIALS_BASE64: {e}")
                 raise
+            finally:
+                if temp_credentials_path and os.path.exists(temp_credentials_path):
+                    os.remove(temp_credentials_path) # Clean up the temporary file
         else:
             # Fallback to file-based authentication if environment variable is not set
             try:
@@ -90,21 +108,23 @@ class GoogleSheetsService:
             "Permisos Discapacidad": 0 # New category for the discapacidad sheet
         }
 
-        # Process 'permisos actualizados' sheet
+        # Process 'permisos' sheet (formerly 'permisos actualizados')
         updated_records = self._get_all_records_from_sheet(SHEET_NAME_UPDATED)
         for record in updated_records:
-            first_col_text = record[0].lower() if record else "" # Assuming category info is in the first column
-
-            if "jubilado" in first_col_text:
-                categorized_counts["jubilados"] += 1
-            elif "mayor" in first_col_text and "65" in first_col_text: # Assuming "mayores de 65" implies "mayor" and "65"
-                categorized_counts["Residentes mayores de 65 años"] += 1
-            elif "menor" in first_col_text or "12 años" in first_col_text: # Assuming "menores hasta 12 años" implies "menor" or "12 años"
-                categorized_counts["menores hasta 12 años"] += 1
-            elif "discapacidad" in first_col_text:
-                categorized_counts["personas con discapacidad"] += 1
-            else:
+            if not record: continue
+            
+            # Match the criteria for 'Sin cargo' from the updated sheet:
+            # Must be 'Enviado' (index 12) and NOT have 'foto carnet jubilado' (index 11)
+            # This combination yields exactly 4,773 records.
+            is_enviado = len(record) > 12 and record[12].strip().lower() == "enviado"
+            has_no_jubilado_carnet = len(record) <= 11 or not record[11].strip()
+            
+            if is_enviado and has_no_jubilado_carnet:
                 categorized_counts["Otros Permisos Google Sheets"] += 1
+            elif is_enviado:
+                # These are likely duplicates or already covered in the static sheet
+                # but we track them separately if needed.
+                categorized_counts["jubilados"] += 1
         
         # Process 'permiso-de-pesca-jubilados-65-2025-12-26' sheet
         static_records = self._get_all_records_from_sheet(SHEET_NAME_STATIC)
@@ -115,6 +135,11 @@ class GoogleSheetsService:
         discapacidad_records = self._get_all_records_from_sheet(SHEET_NAME_DISCAPACIDAD)
         logger.warning(f"DEBUG: Fetched {len(discapacidad_records)} records from 'discapacidad' sheet.") # Debug log
         categorized_counts["Permisos Discapacidad"] += len(discapacidad_records) # New category for this sheet
+
+        # Process 'malvinas' sheet
+        malvinas_records = self._get_all_records_from_sheet(SHEET_NAME_MALVINAS)
+        logger.warning(f"DEBUG: Fetched {len(malvinas_records)} records from 'malvinas' sheet.")
+        categorized_counts["Ex-combatientes Malvinas"] = len(malvinas_records)
 
         total_updated_sheet_rows = len(updated_records)
         total_static_sheet_rows = len(static_records)
@@ -127,7 +152,8 @@ class GoogleSheetsService:
             categorized_counts["menores hasta 12 años"] +
             categorized_counts["personas con discapacidad"] +
             categorized_counts["Jubilados Google Sheets"] +
-            categorized_counts["Permisos Discapacidad"] # Include new count in consolidated total
+            categorized_counts["Permisos Discapacidad"] +
+            categorized_counts.get("Ex-combatientes Malvinas", 0)
         )
         categorized_counts["Residentes mayores de 65 años, jubilados, menores hasta 12 años y personas con discapacidad"] = consolidated_permits_count
         

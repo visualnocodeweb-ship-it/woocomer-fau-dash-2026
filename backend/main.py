@@ -23,11 +23,22 @@ load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '.env')) # Added
 # --- Constants ---
 SYNC_INTERVAL_SECONDS = 120  # 2 minutes
 SHEETS_SYNC_INTERVAL_SECONDS = 300 # 5 minutes for sheets sync
+OFFICIAL_START_DATE = datetime(2025, 10, 15)
 
 # Global variable to store sheets data
 sheets_sync_data = {
-    "updated_sheet_count": 0,
-    "static_sheet_count": 0,
+    "updated_sheet_total_count": 0, # Added missing key
+    "static_sheet_total_count": 0,  # Added missing key
+    "categorized_sheets_counts": { # Added missing key and initialized with empty dict
+        "Residentes mayores de 65 años": 0,
+        "jubilados": 0,
+        "menores hasta 12 años": 0,
+        "personas con discapacidad": 0,
+        "Otros Permisos Google Sheets": 0,
+        "Jubilados Google Sheets": 0,
+        "Permisos Discapacidad": 0,
+        "Residentes mayores de 65 años, jubilados, menores hasta 12 años y personas con discapacidad": 0
+    },
     "last_sync_time": None
 }
 
@@ -41,10 +52,9 @@ app = FastAPI(
 )
 
 # Configure CORS
-origins = ["*"]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -189,8 +199,8 @@ def get_combined_category_stats(db: Session = Depends(get_db)):
     Returns combined category statistics from WooCommerce and Google Sheets.
     Google Sheets data will augment or override WooCommerce data for specific categories.
     """
-    # 1. Get WooCommerce product counts
-    woocommerce_counts = crud.get_product_name_counts(db)
+    # 1. Get WooCommerce product counts (Defaults to OFFICIAL_START_DATE)
+    woocommerce_counts = crud.get_product_name_counts(db, start_date=OFFICIAL_START_DATE)
     
     # Initialize combined_stats with WooCommerce data, filtering the specific category
     combined_stats = {}
@@ -268,6 +278,10 @@ def backfill_orders(request: schemas.DateRangeRequest, db: Session = Depends(get
             break
 
         logging.warning(f"Página {page} obtenida. Procesando y guardando {len(orders_page)} pedidos en la base de datos...")
+        if orders_page:
+            first_date = orders_page[0].get('date_created')
+            last_date = orders_page[-1].get('date_created')
+            logging.warning(f"Rango de fechas en este lote: {first_date} a {last_date}")
         synced_orders_in_batch = crud.create_orders_from_wc_data(db, orders_page)
         total_synced += len(synced_orders_in_batch)
         logging.warning(f"Lote procesado. Total de pedidos sincronizados en este backfill hasta ahora: {total_synced}")
@@ -358,13 +372,15 @@ def get_custom_report(request: schemas.DateRangeRequest, db: Session = Depends(g
     
 @app.get("/api/orders/count")
 def get_completed_orders_count(after_date: Optional[date] = None, before_date: Optional[date] = None, line_item_name: Optional[str] = None, total: Optional[float] = None, db: Session = Depends(get_db)):
-    count = crud.get_orders_count(db, status='completed', after_date=after_date, before_date=before_date, line_item_name=line_item_name, total=total)
+    start_dt = datetime.combine(after_date, datetime.min.time()) if after_date else OFFICIAL_START_DATE
+    count = crud.get_orders_count(db, status='completed', after_date=start_dt, before_date=before_date, line_item_name=line_item_name, total=total)
     return {"total_completed": count}
     
 @app.get("/api/stats/daily_counts")
-def get_daily_stats(start_date: date, db: Session = Depends(get_db)):
-    start_datetime = datetime.combine(start_date, datetime.min.time())
-    return crud.get_daily_counts(db, start_date=start_datetime)
+def get_daily_stats(start_date: Optional[date] = None, end_date: Optional[date] = None, db: Session = Depends(get_db)):
+    start_datetime = datetime.combine(start_date, datetime.min.time()) if start_date else OFFICIAL_START_DATE
+    end_datetime = datetime.combine(end_date, datetime.max.time()) if end_date else None
+    return crud.get_daily_counts(db, start_date=start_datetime, end_date=end_datetime)
 
 @app.get("/api/stats/monthly_counts")
 def get_monthly_stats(db: Session = Depends(get_db)):
@@ -390,11 +406,11 @@ def get_product_stats(start_date: date, db: Session = Depends(get_db)):
 
 @app.get("/api/stats/total_revenue")
 def get_total_revenue_stats(db: Session = Depends(get_db)):
-    return {"total_revenue": crud.get_total_revenue(db)}
+    return {"total_revenue": crud.get_total_revenue(db, start_date=OFFICIAL_START_DATE)}
 
 @app.get("/api/stats/daily_revenue")
 def get_daily_revenue_stats(db: Session = Depends(get_db)):
-    return crud.get_daily_revenue(db)
+    return crud.get_daily_revenue(db, start_date=OFFICIAL_START_DATE)
 
 @app.get("/api/stats/monthly_revenue")
 def get_monthly_revenue_stats(db: Session = Depends(get_db)):

@@ -108,7 +108,7 @@ def get_daily_counts(db: Session, start_date: Optional[datetime] = None, end_dat
     """
     query = (
         db.query(
-            func.strftime('%Y-%m-%d', models.Order.date_created, '-3 hours').label("date"),
+            func.to_char(models.Order.date_created - text("INTERVAL '3 hours'"), 'YYYY-MM-DD').label("date"),
             func.count(models.Order.id).label("count"),
         )
         .filter(models.Order.status == "completed")
@@ -119,8 +119,8 @@ def get_daily_counts(db: Session, start_date: Optional[datetime] = None, end_dat
         query = query.filter(models.Order.date_created < end_date)
         
     result = (
-        query.group_by(func.strftime('%Y-%m-%d', models.Order.date_created, '-3 hours'))
-        .order_by(func.strftime('%Y-%m-%d', models.Order.date_created, '-3 hours'))
+        query.group_by(func.to_char(models.Order.date_created - text("INTERVAL '3 hours'"), 'YYYY-MM-DD'))
+        .order_by(func.to_char(models.Order.date_created - text("INTERVAL '3 hours'"), 'YYYY-MM-DD'))
         .all()
     )
     return [{"date": row.date, "count": row.count} for row in result]
@@ -131,12 +131,12 @@ def get_monthly_counts(db: Session) -> List[Dict[str, Any]]:
     """
     result = (
         db.query(
-            func.strftime('%Y-%m', models.Order.date_created, '-3 hours').label("date"),
+            func.to_char(models.Order.date_created - text("INTERVAL '3 hours'"), 'YYYY-MM').label("date"),
             func.count(models.Order.id).label("count"),
         )
         .filter(models.Order.status == "completed")
-        .group_by(func.strftime('%Y-%m', models.Order.date_created, '-3 hours'))
-        .order_by(func.strftime('%Y-%m', models.Order.date_created, '-3 hours'))
+        .group_by(func.to_char(models.Order.date_created - text("INTERVAL '3 hours'"), 'YYYY-MM'))
+        .order_by(func.to_char(models.Order.date_created - text("INTERVAL '3 hours'"), 'YYYY-MM'))
         .all()
     )
     return [{"date": row.date, "count": row.count} for row in result]
@@ -212,7 +212,7 @@ def get_daily_revenue(db: Session, start_date: Optional[datetime] = None, end_da
     """
     query = (
         db.query(
-            func.strftime('%Y-%m-%d', models.Order.date_created, '-3 hours').label("date"),
+            func.to_char(models.Order.date_created - text("INTERVAL '3 hours'"), 'YYYY-MM-DD').label("date"),
             func.sum(models.Order.total).label("revenue"),
         )
         .filter(models.Order.status == "completed")
@@ -223,8 +223,8 @@ def get_daily_revenue(db: Session, start_date: Optional[datetime] = None, end_da
         query = query.filter(models.Order.date_created < end_date)
 
     result = (
-        query.group_by(func.strftime('%Y-%m-%d', models.Order.date_created, '-3 hours'))
-        .order_by(func.strftime('%Y-%m-%d', models.Order.date_created, '-3 hours'))
+        query.group_by(func.to_char(models.Order.date_created - text("INTERVAL '3 hours'"), 'YYYY-MM-DD'))
+        .order_by(func.to_char(models.Order.date_created - text("INTERVAL '3 hours'"), 'YYYY-MM-DD'))
         .all()
     )
     return [{"date": row.date, "revenue": row.revenue or 0} for row in result]
@@ -234,12 +234,12 @@ def get_monthly_revenue(db: Session) -> List[Dict[str, Any]]:
     """
     result = (
         db.query(
-            func.strftime('%Y-%m', models.Order.date_created, '-3 hours').label("date"),
+            func.to_char(models.Order.date_created - text("INTERVAL '3 hours'"), 'YYYY-MM').label("date"),
             func.sum(models.Order.total).label("revenue"),
         )
         .filter(models.Order.status == "completed")
-        .group_by(func.strftime('%Y-%m', models.Order.date_created, '-3 hours'))
-        .order_by(func.strftime('%Y-%m', models.Order.date_created, '-3 hours'))
+        .group_by(func.to_char(models.Order.date_created - text("INTERVAL '3 hours'"), 'YYYY-MM'))
+        .order_by(func.to_char(models.Order.date_created - text("INTERVAL '3 hours'"), 'YYYY-MM'))
         .all()
     )
     return [{"date": row.date, "revenue": row.revenue or 0} for row in result]

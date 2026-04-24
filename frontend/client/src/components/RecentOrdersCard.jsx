@@ -25,32 +25,45 @@ function RecentOrdersCard() {
 
   return (
     <Paper 
-        elevation={4} 
+        elevation={0} 
         sx={{ 
             p: 3, 
-            borderRadius: 2, 
-            backgroundColor: '#263238', // Dark Charcoal
-            color: 'white',
-            height: '100%'
+            backgroundColor: '#0f0f0f',
+            border: '1px solid rgba(255, 255, 255, 0.05)',
+            borderRadius: 5,
+            transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+            '&:hover': {
+              transform: 'translateY(-4px)',
+              borderColor: 'rgba(188, 255, 0, 0.3)',
+              boxShadow: '0 10px 30px -10px rgba(0,0,0,0.5), 0 0 20px rgba(188, 255, 0, 0.05)'
+            }
         }}
     >
         <Grid container spacing={2} alignItems="center" wrap="nowrap">
             <Grid item>
-                <Box sx={{ backgroundColor: '#00796B', borderRadius: '50%', p: 1.5 }}>
-                    <UpdateIcon sx={{ fontSize: 32, color: 'white' }} />
+                <Box sx={{ 
+                  backgroundColor: '#ffffff', 
+                  borderRadius: '12px', 
+                  p: 1.5,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  boxShadow: '0 0 15px rgba(255, 255, 255, 0.1)'
+                }}>
+                    <UpdateIcon sx={{ fontSize: 32, color: '#000000' }} />
                 </Box>
             </Grid>
             <Grid item xs>
                 <Typography 
-                    variant="subtitle1" 
-                    sx={{ fontWeight: 'bold', color: '#B0BEC5' }}
+                    variant="caption" 
+                    sx={{ fontWeight: 700, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '1.5px' }}
                 >
-                  Permisos desde 15/10/2025:
+                  Nuevos Permisos
                 </Typography>
                 <Typography 
-                    variant="h4" 
+                    variant="h3" 
                     component="div" 
-                    sx={{ fontWeight: 'bold' }}
+                    sx={{ fontWeight: 900, color: '#ffffff', mt: 0.5, lineHeight: 1 }}
                 >
                   {recentCount !== null && recentCount !== 'Error'
                       ? recentCount.toLocaleString('es-AR')

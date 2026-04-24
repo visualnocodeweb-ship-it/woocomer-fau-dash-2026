@@ -3,7 +3,7 @@ import json
 import os
 
 try:
-    with open('temp_credentials.json', 'r') as f:
+    with open('credentials.json', 'r') as f:
         json_content = json.load(f)
     
     # Ensure the JSON is compact for encoding (no extra whitespace/newlines)

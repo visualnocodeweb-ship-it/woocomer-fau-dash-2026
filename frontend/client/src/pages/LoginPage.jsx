@@ -1,147 +1,134 @@
 import React, { useState } from 'react';
-import { supabase } from '../supabaseClient';
-import { Button, Container, Box, Typography, Paper, TextField, Alert, Link, CircularProgress } from '@mui/material';
-import { FaGoogle } from 'react-icons/fa';
+import { 
+  Box, 
+  Paper, 
+  Typography, 
+  TextField, 
+  Button, 
+  Container, 
+  InputAdornment, 
+  IconButton,
+  Alert
+} from '@mui/material';
+import { Visibility, VisibilityOff, Lock, Person } from '@mui/icons-material';
 
-function LoginPage() {
-  const [isSignUp, setIsSignUp] = useState(false);
-  const [email, setEmail] = useState('');
+function LoginPage({ onLogin }) {
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState(null);
-  const [message, setMessage] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState('');
 
-  const handleGoogleLogin = async () => {
-    setLoading(true);
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-    });
-    if (error) {
-      setError(error.message);
-    }
-    setLoading(false);
-  };
-
-  const handleEmailAuth = async (e) => {
+  const handleSubmit = (e) => {
     e.preventDefault();
-    setLoading(true);
-    setError(null);
-    setMessage(null);
-
-    if (isSignUp) {
-      // Sign Up
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-      });
-      if (error) {
-        setError(error.message);
-      } else if (data.user && data.user.identities && data.user.identities.length === 0) {
-        setError("El usuario ya existe. Intenta iniciar sesión.");
-      } else {
-        setMessage('¡Registro exitoso! Por favor, revisa tu correo para confirmar tu cuenta.');
-      }
+    if (username === 'admin' && password === 'admin321') {
+      onLogin();
     } else {
-      // Sign In
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-      if (error) {
-        setError(error.message);
-      }
+      setError('Credenciales incorrectas');
     }
-    setLoading(false);
   };
 
   return (
-    <Container component="main" maxWidth="xs">
-      <Box
-        sx={{
-          marginTop: 8,
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-        }}
-      >
-        <img src="/guardafauna-1.png" alt="Guardafauna Logo" style={{ width: '100%', maxWidth: '300px', marginBottom: '1rem', backgroundColor: 'white', padding: '10px', borderRadius: '8px' }} />
-
-        <Paper elevation={6} sx={{ p: 4, width: '100%', backgroundColor: '#263238', color: 'white' }}>
-          <Typography component="h1" variant="h5" align="center" sx={{ mb: 3 }}>
-            {isSignUp ? 'Crear Cuenta' : 'Iniciar Sesión'}
+    <Box 
+      sx={{ 
+        height: '100vh', 
+        display: 'flex', 
+        alignItems: 'center', 
+        justifyContent: 'center',
+        background: '#000000'
+      }}
+    >
+      <Container maxWidth="xs">
+        <Paper 
+          elevation={0} 
+          sx={{ 
+            p: 5, 
+            backgroundColor: '#0a0a0a', 
+            border: '1px solid #1f1f1f',
+            borderRadius: 6,
+            textAlign: 'center'
+          }}
+        >
+          <Typography 
+            variant="h4" 
+            sx={{ 
+              fontFamily: '"Orbitron", sans-serif', 
+              fontWeight: 800, 
+              color: '#bcff00', 
+              mb: 1,
+              letterSpacing: '1px'
+            }}
+          >
+            PESCA • DASH
+          </Typography>
+          <Typography variant="body2" sx={{ color: 'text.secondary', mb: 4 }}>
+            Inicia sesión para continuar
           </Typography>
 
-          {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-          {message && <Alert severity="success" sx={{ mb: 2 }}>{message}</Alert>}
+          {error && (
+            <Alert severity="error" sx={{ mb: 3, borderRadius: 2, backgroundColor: 'rgba(211, 47, 47, 0.1)', color: '#ff5252' }}>
+              {error}
+            </Alert>
+          )}
 
-          <Box component="form" onSubmit={handleEmailAuth} noValidate sx={{ mt: 1 }}>
+          <form onSubmit={handleSubmit}>
             <TextField
-              margin="normal"
-              required
               fullWidth
-              id="email"
-              label="Dirección de Email"
-              name="email"
-              autoComplete="email"
-              autoFocus
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              InputLabelProps={{ style: { color: '#B0BEC5' } }}
-              sx={{ '& .MuiInputBase-root': { color: 'white' }, '& .MuiOutlinedInput-notchedOutline': { borderColor: '#546E7A' } }}
+              variant="outlined"
+              placeholder="Usuario"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              sx={{ mb: 2 }}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <Person sx={{ color: 'text.secondary' }} />
+                  </InputAdornment>
+                ),
+              }}
             />
             <TextField
-              margin="normal"
-              required
               fullWidth
-              name="password"
-              label="Contraseña"
-              type="password"
-              id="password"
-              autoComplete="current-password"
+              variant="outlined"
+              type={showPassword ? 'text' : 'password'}
+              placeholder="Contraseña"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              InputLabelProps={{ style: { color: '#B0BEC5' } }}
-              sx={{ '& .MuiInputBase-root': { color: 'white' }, '& .MuiOutlinedInput-notchedOutline': { borderColor: '#546E7A' } }}
+              sx={{ mb: 4 }}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <Lock sx={{ color: 'text.secondary' }} />
+                  </InputAdornment>
+                ),
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <IconButton onClick={() => setShowPassword(!showPassword)} edge="end">
+                      {showPassword ? <VisibilityOff /> : <Visibility />}
+                    </IconButton>
+                  </InputAdornment>
+                ),
+              }}
             />
-            <Button
+            <Button 
+              fullWidth 
+              variant="contained" 
               type="submit"
-              fullWidth
-              variant="contained"
-              disabled={loading}
-              sx={{ mt: 3, mb: 2, height: '48px' }}
-            >
-              {loading ? <CircularProgress size={24} /> : (isSignUp ? 'Registrarse' : 'Iniciar Sesión')}
-            </Button>
-            
-            <Typography variant="body2" align="center" sx={{ my: 2 }}>
-              O
-            </Typography>
-
-            <Button
-              type="button"
-              fullWidth
-              variant="contained"
-              onClick={handleGoogleLogin}
-              disabled={loading}
-              startIcon={<FaGoogle />}
               sx={{ 
-                  backgroundColor: 'white', 
-                  color: '#4285F4',
-                  '&:hover': { backgroundColor: '#f1f1f1' }
+                py: 1.5, 
+                fontSize: '1rem', 
+                boxShadow: '0 0 20px rgba(188, 255, 0, 0.2)' 
               }}
             >
-              Continuar con Google
+              Entrar
             </Button>
-
-            <Box textAlign="center" sx={{ mt: 3 }}>
-              <Link href="#" variant="body2" onClick={(e) => { e.preventDefault(); setIsSignUp(!isSignUp); setError(null); setMessage(null); }} sx={{ color: '#90A4AE' }}>
-                {isSignUp ? '¿Ya tienes una cuenta? Inicia sesión' : '¿No tienes una cuenta? Regístrate'}
-              </Link>
-            </Box>
-          </Box>
+          </form>
+          
+          <Typography variant="caption" sx={{ display: 'block', mt: 4, color: '#333' }}>
+            PESCA NEUQUÉN • 2026
+          </Typography>
         </Paper>
-      </Box>
-    </Container>
+      </Container>
+    </Box>
   );
 }
 

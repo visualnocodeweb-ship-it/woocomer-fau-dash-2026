@@ -43,38 +43,39 @@ function MonthlyCountsChart() {
 
   return (
     <Paper 
-        elevation={4} 
+        elevation={0} 
         sx={{ 
             p: 3, 
-            borderRadius: 2, 
-            height: '450px', 
-            backgroundColor: '#263238', 
-            color: '#B0BEC5'
+            height: '400px',
+            display: 'flex',
+            flexDirection: 'column',
+            width: '100%',
+            minWidth: 0
         }}
     >
-      <Typography variant="h6" gutterBottom sx={{ color: 'white', fontWeight: 'bold' }}>
+      <Typography variant="h6" gutterBottom sx={{ fontWeight: 800, fontSize: '0.75rem', color: 'primary.main', mb: 3, textTransform: 'uppercase', letterSpacing: '1.5px' }}>
         Permisos por Mes
       </Typography>
       {loading ? (
-        <Box display="flex" justifyContent="center" alignItems="center" height="100%">
-          <CircularProgress />
+        <Box display="flex" justifyContent="center" alignItems="center" height="250px">
+          <CircularProgress color="primary" />
         </Box>
       ) : (
-        <ResponsiveContainer width="100%" height="90%">
-          <ComposedChart data={data} margin={{ top: 20, right: 30, bottom: 5, left: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#455A64" />
-            <XAxis dataKey="date" tick={{ fill: '#B0BEC5' }} />
-            <YAxis tick={{ fill: '#B0BEC5' }} />
+        <ResponsiveContainer width="100%" height={300}>
+          <ComposedChart data={data} margin={{ top: 10, right: 30, bottom: 0, left: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.03)" vertical={false} />
+            <XAxis dataKey="date" tick={{ fill: '#666', fontSize: 10 }} axisLine={false} tickLine={false} />
+            <YAxis tick={{ fill: '#666', fontSize: 10 }} axisLine={false} tickLine={false} />
             <Tooltip 
                 contentStyle={{ 
-                    backgroundColor: '#37474F', 
-                    border: '1px solid #455A64',
+                    backgroundColor: '#000000', 
+                    border: '1px solid rgba(188, 255, 0, 0.2)',
+                    borderRadius: '8px',
                     color: 'white'
                 }} 
             />
-            <Legend wrapperStyle={{ color: 'white' }} />
-            <Bar dataKey="count" barSize={30} fill="#607D8B" name="Cantidad Mensual" />
-            <Line type="monotone" dataKey="count" stroke="#FFFFFF" strokeWidth={2} name="Tendencia" />
+            <Bar dataKey="count" barSize={16} radius={[4, 4, 0, 0]} fill="#bcff00" name="Cantidad" />
+            <Line type="monotone" dataKey="count" stroke="#ffffff" strokeWidth={1} dot={false} activeDot={{ r: 4 }} name="Tendencia" />
           </ComposedChart>
         </ResponsiveContainer>
       )}

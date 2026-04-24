@@ -1,5 +1,10 @@
 import json
+import os
+from dotenv import load_dotenv
 from woocommerce_service import WooCommerceService
+
+# Load environment variables
+load_dotenv()
 
 def run_test():
     print("Intentando conectar a WooCommerce...")

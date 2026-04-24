@@ -18,16 +18,13 @@ function RegionsChart({ data, loading, title }) {
 
   return (
     <Paper 
-        elevation={4} 
+        elevation={0} 
         sx={{ 
             p: 3, 
-            borderRadius: 2, 
             height: '600px', 
-            backgroundColor: '#263238', 
-            color: '#B0BEC5'
         }}
     >
-      <Typography variant="h6" gutterBottom sx={{ color: 'white', fontWeight: 'bold' }}>
+      <Typography variant="h6" gutterBottom sx={{ fontFamily: 'Orbitron, sans-serif', fontSize: '0.8rem', color: '#bcff00', fontWeight: 700, mb: 3, textTransform: 'uppercase', letterSpacing: '1px' }}>
         {title}
       </Typography>
       {loading ? (
@@ -35,35 +32,37 @@ function RegionsChart({ data, loading, title }) {
           <CircularProgress />
         </Box>
       ) : (
-        <ResponsiveContainer width="100%" height="90%">
+        <ResponsiveContainer width="100%" height="95%">
           <ComposedChart
             layout="vertical"
             data={data}
             margin={{
-              top: 20,
-              right: 30,
-              bottom: 5,
-              left: isMobile ? 60 : 100,
+              top: 10,
+              right: 10,
+              bottom: 0,
+              left: isMobile ? 40 : 80,
             }}
           >
-            <CartesianGrid stroke="#455A64" />
-            <XAxis type="number" tick={{ fill: '#B0BEC5', fontSize: isMobile ? 10 : 12 }} />
+            <CartesianGrid stroke="rgba(255,255,255,0.03)" horizontal={false} />
+            <XAxis type="number" tick={{ fill: '#666', fontSize: 11 }} axisLine={false} tickLine={false} />
             <YAxis
               dataKey="name"
               type="category"
               scale="band"
-              tick={{ fill: '#B0BEC5', fontSize: isMobile ? 10 : 12 }}
+              tick={{ fill: '#666', fontSize: 11 }}
               width={isMobile ? 80 : 120}
+              axisLine={false}
+              tickLine={false}
             />
             <Tooltip
               contentStyle={{
-                backgroundColor: '#37474F',
-                border: '1px solid #455A64',
+                backgroundColor: '#000000',
+                border: '1px solid rgba(188, 255, 0, 0.2)',
+                borderRadius: '4px',
                 color: 'white',
               }}
             />
-            <Legend wrapperStyle={{ color: 'white' }} />
-            <Bar dataKey="value" barSize={isMobile ? 15 : 20} fill="#00C49F" name="Cantidad" />
+            <Bar dataKey="value" barSize={12} radius={[0, 2, 2, 0]} fill="#bcff00" name="Cantidad" />
           </ComposedChart>
         </ResponsiveContainer>
       )}

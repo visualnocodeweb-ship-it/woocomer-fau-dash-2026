@@ -36,32 +36,44 @@ function TotalRevenueCard() {
 
   return (
     <Paper 
-        elevation={4} 
+        elevation={0} 
         sx={{ 
             p: 3, 
-            borderRadius: 2, 
-            backgroundColor: '#263238', 
-            color: 'white',
-            height: '100%'
+            height: '100%',
+            backgroundColor: '#0f0f0f',
+            border: '1px solid rgba(255, 255, 255, 0.05)',
+            transition: 'transform 0.2s ease-in-out, border-color 0.2s ease-in-out',
+            '&:hover': {
+              transform: 'translateY(-4px)',
+              borderColor: 'rgba(188, 255, 0, 0.3)',
+            }
         }}
     >
         <Grid container spacing={2} alignItems="center" wrap="nowrap">
             <Grid item>
-                <Box sx={{ backgroundColor: '#4CAF50', borderRadius: '50%', p: 1.5 }}>
-                    <MonetizationOnIcon sx={{ fontSize: 32, color: 'white' }} />
+                <Box sx={{ 
+                  backgroundColor: '#bcff00', 
+                  borderRadius: '12px', 
+                  p: 1.5,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  boxShadow: '0 0 15px rgba(188, 255, 0, 0.2)'
+                }}>
+                    <MonetizationOnIcon sx={{ fontSize: 32, color: '#000000' }} />
                 </Box>
             </Grid>
             <Grid item xs>
                 <Typography 
-                    variant="subtitle1" 
-                    sx={{ fontWeight: 'bold', color: '#B0BEC5' }}
+                    variant="caption" 
+                    sx={{ fontWeight: 700, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '1.5px' }}
                 >
-                  Recaudación Total:
+                  Recaudación Total
                 </Typography>
                 <Typography 
-                    variant="h4" 
+                    variant="h3" 
                     component="div" 
-                    sx={{ fontWeight: 'bold' }}
+                    sx={{ fontWeight: 900, color: '#ffffff', mt: 0.5, lineHeight: 1 }}
                 >
                   {isVisible ? (
                     loading ? <CircularProgress color="inherit" size={28} /> : (

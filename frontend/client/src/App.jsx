@@ -1,80 +1,106 @@
-import React from 'react';
-import { Routes, Route, Link as RouterLink } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { Routes, Route, useNavigate } from 'react-router-dom';
 import {
   Box,
   AppBar,
   CssBaseline,
   Toolbar,
   Typography,
-  Button,
   Chip,
   useTheme,
   useMediaQuery,
-  IconButton
+  Button
 } from '@mui/material';
-import LogoutIcon from '@mui/icons-material/Logout'; // Added LogoutIcon
+import LogoutIcon from '@mui/icons-material/Logout';
 
 import DashboardPage from './pages/DashboardPage';
-import LoginPage from './pages/LoginPage'; // Restored LoginPage import
-import ProtectedRoute from './auth/ProtectedRoute'; // Restored ProtectedRoute import
-import { useAuth } from './auth/AuthContext'; // Restored useAuth import
-import { supabase } from './supabaseClient'; // Restored supabase import
-
+import LoginPage from './pages/LoginPage';
 
 function App() {
-  const { session } = useAuth();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const navigate = useNavigate();
 
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
+  // Check if already logged in on mount
+  useEffect(() => {
+    const auth = localStorage.getItem('isLoggedIn');
+    if (auth === 'true') {
+      setIsLoggedIn(true);
+    }
+  }, []);
+
+  const handleLogin = () => {
+    setIsLoggedIn(true);
+    localStorage.setItem('isLoggedIn', 'true');
+    navigate('/');
   };
+
+  const handleLogout = () => {
+    setIsLoggedIn(false);
+    localStorage.removeItem('isLoggedIn');
+    navigate('/');
+  };
+
+  if (!isLoggedIn) {
+    return (
+      <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+        <CssBaseline />
+        <Routes>
+          <Route path="*" element={<LoginPage onLogin={handleLogin} />} />
+        </Routes>
+      </Box>
+    );
+  }
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column' }}>
       <CssBaseline />
-      <AppBar position="fixed">
+      <AppBar position="fixed" elevation={0}>
         <Toolbar>
-          <Typography variant="h6" noWrap component="div">
-            {isMobile ? 'Dashboard' : 'Dashboard de Permisos'}
+          <Typography 
+            variant="h6" 
+            noWrap 
+            component="div" 
+            sx={{ fontWeight: 800, letterSpacing: '1px', fontFamily: "'Orbitron', sans-serif" }}
+          >
+            {isMobile ? 'PESCA • DASH' : 'PESCA • DASHBOARD'}
           </Typography>
-          <Box sx={{ flexGrow: 1 }} /> {/* This spacer pushes everything to the right */}
-          {session ? (
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1, sm: 2 } }}>
-              {!isMobile && <Chip label={session.user.email} color="info" />}
-              {isMobile ? (
-                <IconButton color="inherit" onClick={handleLogout} aria-label="Cerrar Sesión">
-                  <LogoutIcon />
-                </IconButton>
-              ) : (
-                <Button color="inherit" onClick={handleLogout}>
-                  Cerrar Sesión
-                </Button>
-              )}
-              <img src="/guardafauna-1.png" alt="Guardafauna Logo" style={{ height: '40px' }} />
-            </Box>
-          ) : (
-            <Button color="inherit" component={RouterLink} to="/login">
-              Iniciar Sesión
-            </Button>
-          )}
+          <Box sx={{ flexGrow: 1 }} /> 
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1, sm: 2 } }}>
+             {!isMobile && (
+               <Chip 
+                 label="MODO ADMINISTRADOR" 
+                 sx={{ 
+                   fontWeight: 800, 
+                   fontSize: '0.65rem',
+                   backgroundColor: '#bcff00', 
+                   color: '#000000',
+                   height: 24
+                 }} 
+               />
+             )}
+             <Button 
+                variant="outlined" 
+                color="inherit" 
+                size="small" 
+                startIcon={<LogoutIcon />}
+                onClick={handleLogout}
+                sx={{ borderRadius: 10, borderColor: 'rgba(255,255,255,0.1)' }}
+             >
+                Salir
+             </Button>
+             <img src="/guardafauna-1.png" alt="Guardafauna Logo" style={{ height: '40px' }} />
+          </Box>
         </Toolbar>
       </AppBar>
       <Box
         component="main"
-        sx={{ flexGrow: 1, bgcolor: 'background.default', p: 3, width: '100%' }}
+        sx={{ flexGrow: 1, bgcolor: 'background.default', p: 0, width: '100%' }}
       >
-        <Toolbar /> {/* This is to offset the content below the AppBar */}
+        <Toolbar /> 
         <Routes>
-          <Route path="/login" element={<LoginPage />} />
-          <Route 
-            path="/" 
-            element={
-              <ProtectedRoute>
-                <DashboardPage />
-              </ProtectedRoute>
-            } 
-          />
+          <Route path="*" element={<DashboardPage />} />
         </Routes>
       </Box>
     </Box>
