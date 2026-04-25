@@ -23,21 +23,28 @@ class GoogleSheetsService:
 
     def _authenticate_gspread(self):
         """Authenticates with Google Sheets API using service account credentials from environment variable or file."""
-        credentials_base64 = os.getenv("GOOGLE_SHEETS_CREDENTIALS_BASE64")
+        credentials_env = os.getenv("GOOGLE_SHEETS_CREDENTIALS_BASE64")
 
-        if credentials_base64:
-            # Limpiar el string de base64: eliminar cualquier carácter que no sea ASCII o de base64 
-            # (como espacios, saltos de línea invisibles o comillas accidentales)
-            import re
-            clean_b64_str = re.sub(r'[^A-Za-z0-9+/=]', '', credentials_base64)
-            
-            # Corregir el padding (relleno) si es necesario (el largo debe ser múltiplo de 4)
-            clean_b64_str += "=" * ((4 - len(clean_b64_str) % 4) % 4)
-            
-            logger.info(f"Raw GOOGLE_SHEETS_CREDENTIALS_BASE64 from env: {clean_b64_str[:50]}...") # Log first 50 chars for brevity
+        if credentials_env:
+            logger.info(f"Raw GOOGLE_SHEETS_CREDENTIALS_BASE64 from env: {credentials_env[:50]}...") # Log first 50 chars for brevity
             temp_credentials_path = None
             try:
-                credentials_json_str = base64.b64decode(clean_b64_str).decode('utf-8')
+                credentials_str = credentials_env.strip()
+                
+                # Comprobar si el usuario pegó el JSON en crudo en lugar de base64
+                if credentials_str.startswith('{'):
+                    logger.info("Environment variable appears to be raw JSON. Parsing directly without base64 decode.")
+                    credentials_json_str = credentials_str
+                else:
+                    logger.info("Attempting base64 decode.")
+                    # Limpiar espacios o saltos de línea accidentales
+                    import re
+                    clean_b64_str = re.sub(r'\s+', '', credentials_str)
+                    
+                    # Corregir el padding (relleno)
+                    clean_b64_str += "=" * ((4 - len(clean_b64_str) % 4) % 4)
+                    
+                    credentials_json_str = base64.b64decode(clean_b64_str).decode('utf-8')
                 logger.info(f"Full credentials_json_str after base64 decode: {credentials_json_str}") # Log full string
                 
                 # Parse the string into a JSON object and then dump it back
