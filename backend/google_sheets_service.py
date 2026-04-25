@@ -30,21 +30,31 @@ class GoogleSheetsService:
             temp_credentials_path = None
             try:
                 credentials_str = credentials_env.strip()
+                credentials_json_str = None
                 
-                # Comprobar si el usuario pegó el JSON en crudo en lugar de base64
-                if credentials_str.startswith('{'):
-                    logger.info("Environment variable appears to be raw JSON. Parsing directly without base64 decode.")
+                # Primero, intentar ver si es un JSON directo válido
+                try:
+                    json.loads(credentials_str)
                     credentials_json_str = credentials_str
-                else:
-                    logger.info("Attempting base64 decode.")
-                    # Limpiar espacios o saltos de línea accidentales
+                    logger.info("GOOGLE_SHEETS_CREDENTIALS_BASE64 was parsed directly as raw JSON.")
+                except json.JSONDecodeError:
+                    logger.info("Not valid raw JSON. Attempting base64 decode.")
                     import re
-                    clean_b64_str = re.sub(r'\s+', '', credentials_str)
+                    # Limpiar completamente todo lo que NO sea un carácter base64 válido
+                    # Esto previene el ValueError de caracteres no ASCII
+                    clean_b64_str = re.sub(r'[^A-Za-z0-9+/=]', '', credentials_str)
                     
                     # Corregir el padding (relleno)
                     clean_b64_str += "=" * ((4 - len(clean_b64_str) % 4) % 4)
                     
-                    credentials_json_str = base64.b64decode(clean_b64_str).decode('utf-8')
+                    # Decodificar. Ignoramos errores de utf-8 por si acaso hay basura
+                    try:
+                        decoded_bytes = base64.b64decode(clean_b64_str)
+                        credentials_json_str = decoded_bytes.decode('utf-8')
+                    except UnicodeDecodeError:
+                        # Si no es utf-8 válido, intentamos forzarlo o lanzamos un error claro
+                        logger.error("Base64 decoded bytes are not valid UTF-8. The credentials might be corrupted.")
+                        credentials_json_str = decoded_bytes.decode('utf-8', errors='ignore')
                 logger.info(f"Full credentials_json_str after base64 decode: {credentials_json_str}") # Log full string
                 
                 # Parse the string into a JSON object and then dump it back
