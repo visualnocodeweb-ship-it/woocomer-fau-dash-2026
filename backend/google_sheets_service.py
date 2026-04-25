@@ -58,8 +58,8 @@ class GoogleSheetsService:
                 logger.info(f"Full credentials_json_str after base64 decode: {credentials_json_str}") # Log full string
                 
                 # Parse the string into a JSON object and then dump it back
-                # This ensures proper escaping of special characters like backslashes.
-                credentials_data = json.loads(credentials_json_str)
+                # strict=False allows literal control characters like actual newlines inside strings
+                credentials_data = json.loads(credentials_json_str, strict=False)
                 corrected_json_str = json.dumps(credentials_data)
 
                 # Create a temporary file to store the credentials
