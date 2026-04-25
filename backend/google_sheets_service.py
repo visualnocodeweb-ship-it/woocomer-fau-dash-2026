@@ -31,6 +31,9 @@ class GoogleSheetsService:
             import re
             clean_b64_str = re.sub(r'[^A-Za-z0-9+/=]', '', credentials_base64)
             
+            # Corregir el padding (relleno) si es necesario (el largo debe ser múltiplo de 4)
+            clean_b64_str += "=" * ((4 - len(clean_b64_str) % 4) % 4)
+            
             logger.info(f"Raw GOOGLE_SHEETS_CREDENTIALS_BASE64 from env: {clean_b64_str[:50]}...") # Log first 50 chars for brevity
             temp_credentials_path = None
             try:
