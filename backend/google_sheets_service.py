@@ -35,17 +35,20 @@ class GoogleSheetsService:
                         credentials_json_str = credentials_str
                         logger.info("GOOGLE_SHEETS_CREDENTIALS_BASE64 was parsed directly as raw JSON.")
                     except json.JSONDecodeError as je:
-                        logger.error(f"GOOGLE_SHEETS_CREDENTIALS_BASE64 looks like JSON but is invalid: {je}")
+                        logger.error(f"GOOGLE_SHEETS_CREDENTIALS_BASE64 starts with {{ but is invalid JSON: {je}")
+                        logger.error(f"Invalid JSON content: {credentials_str[:500]}")
                         raise
                 else:
                     logger.info("Does not start with '{'. Attempting base64 decode.")
                     import re
                     clean_b64_str = re.sub(r'[^A-Za-z0-9+/=]', '', credentials_str)
+                    logger.info(f"Cleaned base64 (first 50 chars): {clean_b64_str[:50]}")
                     clean_b64_str += "=" * ((4 - len(clean_b64_str) % 4) % 4)
                     
                     try:
                         decoded_bytes = base64.b64decode(clean_b64_str)
                         credentials_json_str = decoded_bytes.decode('utf-8')
+                        logger.info(f"Base64 decoded successfully, length: {len(credentials_json_str)}")
                     except Exception as e:
                         logger.error(f"Error decoding base64: {e}")
                         credentials_json_str = decoded_bytes.decode('utf-8', errors='ignore') if 'decoded_bytes' in locals() else None
@@ -53,7 +56,7 @@ class GoogleSheetsService:
                 if not credentials_json_str:
                     raise ValueError("Could not obtain valid JSON credentials string.")
 
-                logger.info(f"Decoded JSON string (first 200 chars): {credentials_json_str[:200]}")
+                logger.info(f"Credentials string to parse (first 300 chars): {repr(credentials_json_str[:300])}")
                 
                 credentials_data = json.loads(credentials_json_str, strict=False)
                 corrected_json_str = json.dumps(credentials_data)
