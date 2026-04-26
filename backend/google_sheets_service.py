@@ -22,9 +22,9 @@ class GoogleSheetsService:
     def _authenticate_gspread(self):
         credentials_env = os.getenv("GOOGLE_SHEETS_CREDENTIALS_BASE64")
 
+        logger.info(f"GOOGLE_SHEETS_CREDENTIALS_BASE64 is {'set' if credentials_env else 'NOT SET'}")
+        
         if credentials_env:
-            logger.info(f"Raw GOOGLE_SHEETS_CREDENTIALS_BASE64 from env: {credentials_env[:50]}...")
-            temp_credentials_path = None
             try:
                 credentials_str = credentials_env.strip()
                 credentials_json_str = None
@@ -68,27 +68,24 @@ class GoogleSheetsService:
                 
                 gc = gspread.service_account(filename=temp_credentials_path)
                 logger.info("Successfully authenticated with Google Sheets API using GOOGLE_SHEETS_CREDENTIALS_BASE64 via temporary file.")
+                os.remove(temp_credentials_path)
                 return gc
             except Exception as e:
-                logger.error(f"Error authenticating with Google Sheets API using GOOGLE_SHEETS_CREDENTIALS_BASE64: {e}")
-                raise
-            finally:
-                if temp_credentials_path and os.path.exists(temp_credentials_path):
-                    os.remove(temp_credentials_path)
-        else:
-            try:
-                script_dir = os.path.dirname(__file__)
-                credentials_path = os.path.join(script_dir, "credentials.json")
+                logger.error(f"Error with GOOGLE_SHEETS_CREDENTIALS_BASE64: {e}. Falling back to file.")
+        
+        try:
+            script_dir = os.path.dirname(__file__)
+            credentials_path = os.path.join(script_dir, "credentials.json")
 
-                if not os.path.exists(credentials_path):
-                    raise FileNotFoundError(f"credentials.json not found at {credentials_path}")
+            if not os.path.exists(credentials_path):
+                raise FileNotFoundError(f"credentials.json not found at {credentials_path}")
 
-                gc = gspread.service_account(filename=credentials_path)
-                logger.info("Successfully authenticated with Google Sheets API using credentials.json.")
-                return gc
-            except Exception as e:
-                logger.error(f"Error authenticating with Google Sheets API: {e}")
-                raise
+            gc = gspread.service_account(filename=credentials_path)
+            logger.info("Successfully authenticated with Google Sheets API using credentials.json.")
+            return gc
+        except Exception as e:
+            logger.error(f"Error authenticating with Google Sheets API: {e}")
+            raise
 
     def _get_all_records_from_sheet(self, worksheet_name: str) -> List[List[str]]:
         try:
