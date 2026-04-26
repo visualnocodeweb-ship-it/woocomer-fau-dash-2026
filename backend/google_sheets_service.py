@@ -5,11 +5,9 @@ import gspread
 import logging
 from typing import List, Dict, Any
 
-# Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Google Sheet ID and worksheet names
 GOOGLE_SHEET_ID = "1dn9W-1hxSxPmnUUHDbF_ZG_yzaYlOYFoIO3LqDMGgQw"
 SHEET_NAME_UPDATED = "permisos"
 SHEET_NAME_STATIC = "permiso-de-pesca-jubilados-65-2025-12-26"
@@ -22,47 +20,44 @@ class GoogleSheetsService:
         self.spreadsheet = self.gc.open_by_key(GOOGLE_SHEET_ID)
 
     def _authenticate_gspread(self):
-        """Authenticates with Google Sheets API using service account credentials from environment variable or file."""
         credentials_env = os.getenv("GOOGLE_SHEETS_CREDENTIALS_BASE64")
 
         if credentials_env:
-            logger.info(f"Raw GOOGLE_SHEETS_CREDENTIALS_BASE64 from env: {credentials_env[:50]}...") # Log first 50 chars for brevity
+            logger.info(f"Raw GOOGLE_SHEETS_CREDENTIALS_BASE64 from env: {credentials_env[:50]}...")
             temp_credentials_path = None
             try:
                 credentials_str = credentials_env.strip()
                 credentials_json_str = None
                 
-                # Primero, intentar ver si es un JSON directo válido
-                try:
-                    json.loads(credentials_str)
-                    credentials_json_str = credentials_str
-                    logger.info("GOOGLE_SHEETS_CREDENTIALS_BASE64 was parsed directly as raw JSON.")
-                except json.JSONDecodeError:
-                    logger.info("Not valid raw JSON. Attempting base64 decode.")
+                if credentials_str.startswith('{'):
+                    try:
+                        json.loads(credentials_str, strict=False)
+                        credentials_json_str = credentials_str
+                        logger.info("GOOGLE_SHEETS_CREDENTIALS_BASE64 was parsed directly as raw JSON.")
+                    except json.JSONDecodeError as je:
+                        logger.error(f"GOOGLE_SHEETS_CREDENTIALS_BASE64 looks like JSON but is invalid: {je}")
+                        raise
+                else:
+                    logger.info("Does not start with '{'. Attempting base64 decode.")
                     import re
-                    # Limpiar completamente todo lo que NO sea un carácter base64 válido
-                    # Esto previene el ValueError de caracteres no ASCII
                     clean_b64_str = re.sub(r'[^A-Za-z0-9+/=]', '', credentials_str)
-                    
-                    # Corregir el padding (relleno)
                     clean_b64_str += "=" * ((4 - len(clean_b64_str) % 4) % 4)
                     
-                    # Decodificar. Ignoramos errores de utf-8 por si acaso hay basura
                     try:
                         decoded_bytes = base64.b64decode(clean_b64_str)
                         credentials_json_str = decoded_bytes.decode('utf-8')
-                    except UnicodeDecodeError:
-                        # Si no es utf-8 válido, intentamos forzarlo o lanzamos un error claro
-                        logger.error("Base64 decoded bytes are not valid UTF-8. The credentials might be corrupted.")
-                        credentials_json_str = decoded_bytes.decode('utf-8', errors='ignore')
-                logger.info(f"Full credentials_json_str after base64 decode: {credentials_json_str}") # Log full string
+                    except Exception as e:
+                        logger.error(f"Error decoding base64: {e}")
+                        credentials_json_str = decoded_bytes.decode('utf-8', errors='ignore') if 'decoded_bytes' in locals() else None
+
+                if not credentials_json_str:
+                    raise ValueError("Could not obtain valid JSON credentials string.")
+
+                logger.info(f"Decoded JSON string (first 200 chars): {credentials_json_str[:200]}")
                 
-                # Parse the string into a JSON object and then dump it back
-                # strict=False allows literal control characters like actual newlines inside strings
                 credentials_data = json.loads(credentials_json_str, strict=False)
                 corrected_json_str = json.dumps(credentials_data)
 
-                # Create a temporary file to store the credentials
                 import tempfile
                 with tempfile.NamedTemporaryFile(mode='w+', delete=False, encoding='utf-8') as temp_file:
                     temp_file.write(corrected_json_str)
@@ -76,9 +71,8 @@ class GoogleSheetsService:
                 raise
             finally:
                 if temp_credentials_path and os.path.exists(temp_credentials_path):
-                    os.remove(temp_credentials_path) # Clean up the temporary file
+                    os.remove(temp_credentials_path)
         else:
-            # Fallback to file-based authentication if environment variable is not set
             try:
                 script_dir = os.path.dirname(__file__)
                 credentials_path = os.path.join(script_dir, "credentials.json")
@@ -94,19 +88,14 @@ class GoogleSheetsService:
                 raise
 
     def _get_all_records_from_sheet(self, worksheet_name: str) -> List[List[str]]:
-        """Fetches all non-empty rows from a worksheet, excluding the header."""
         try:
             worksheet = self.spreadsheet.worksheet(worksheet_name)
-            # Get all values
-            all_values = worksheet.get_all_values()
+            all_value = worksheet.get_all_values()
             
-            if not all_values:
+            if not all_value:
                 return []
             
-            # Assuming the first row is a header, so start from the second row
-            data_rows = all_values[1:]
-            
-            # Filter out rows where the first column is empty (considering it a completed row)
+            data_rows = all_value[1:]
             completed_records = [row for row in data_rows if row and row[0].strip()]
             
             logger.info(f"Fetched {len(completed_records)} completed records from '{worksheet_name}'.")
@@ -119,58 +108,42 @@ class GoogleSheetsService:
             return []
 
     def get_categorized_sheets_data(self) -> Dict[str, Any]:
-        """
-        Fetches data from both sheets, categorizes them, and returns counts.
-        Categorization for 'permisos actualizados' is based on keywords in the first column.
-        """
         categorized_counts: Dict[str, int] = {
             "Residentes mayores de 65 años": 0,
             "jubilados": 0,
             "menores hasta 12 años": 0,
             "personas con discapacidad": 0,
-            "Otros Permisos Google Sheets": 0, # Catch-all for updated sheet
-            "Jubilados Google Sheets": 0, # For the static sheet
-            "Permisos Discapacidad": 0 # New category for the discapacidad sheet
+            "Otros Permisos Google Sheets": 0,
+            "Jubilados Google Sheets": 0,
+            "Permisos Discapacidad": 0
         }
 
-        # Process 'permisos' sheet (formerly 'permisos actualizados')
         updated_records = self._get_all_records_from_sheet(SHEET_NAME_UPDATED)
         for record in updated_records:
             if not record: continue
             
-            # Match the criteria for 'Sin cargo' from the updated sheet:
-            # Must be 'Enviado' (index 12) and NOT have 'foto carnet jubilado' (index 11)
-            # This combination yields exactly 4,773 records.
             is_enviado = len(record) > 12 and record[12].strip().lower() == "enviado"
             has_no_jubilado_carnet = len(record) <= 11 or not record[11].strip()
             
             if is_enviado and has_no_jubilado_carnet:
                 categorized_counts["Otros Permisos Google Sheets"] += 1
             elif is_enviado:
-                # These are likely duplicates or already covered in the static sheet
-                # but we track them separately if needed.
                 categorized_counts["jubilados"] += 1
         
-        # Process 'permiso-de-pesca-jubilados-65-2025-12-26' sheet
         static_records = self._get_all_records_from_sheet(SHEET_NAME_STATIC)
-        # All records from this sheet are assumed to be "Jubilados Google Sheets"
         categorized_counts["Jubilados Google Sheets"] += len(static_records)
 
-        # Process 'discapacidad' sheet
         discapacidad_records = self._get_all_records_from_sheet(SHEET_NAME_DISCAPACIDAD)
-        logger.warning(f"DEBUG: Fetched {len(discapacidad_records)} records from 'discapacidad' sheet.") # Debug log
-        categorized_counts["Permisos Discapacidad"] += len(discapacidad_records) # New category for this sheet
+        logger.warning(f"DEBUG: Fetched {len(discapacidad_records)} records from 'discapacidad' sheet.")
+        categorized_counts["Permisos Discapacidad"] += len(discapacidad_records)
 
-        # Process 'malvinas' sheet
         malvinas_records = self._get_all_records_from_sheet(SHEET_NAME_MALVINAS)
         logger.warning(f"DEBUG: Fetched {len(malvinas_records)} records from 'malvinas' sheet.")
         categorized_counts["Ex-combatientes Malvinas"] = len(malvinas_records)
 
         total_updated_sheet_rows = len(updated_records)
         total_static_sheet_rows = len(static_records)
-        # total_discapacidad_sheet_rows = len(discapacidad_records) # New total (not used, remove)
 
-        # Consolidate counts for the new requested category
         consolidated_permits_count = (
             categorized_counts["Residentes mayores de 65 años"] +
             categorized_counts["jubilados"] +
@@ -182,11 +155,10 @@ class GoogleSheetsService:
         )
         categorized_counts["Residentes mayores de 65 años, jubilados, menores hasta 12 años y personas con discapacidad"] = consolidated_permits_count
         
-        logger.warning(f"DEBUG: Final categorized_counts before return: {categorized_counts}") # Debug log
+        logger.warning(f"DEBUG: Final categorized_counts before return: {categorized_counts}")
 
         return {
             "updated_sheet_total_count": total_updated_sheet_rows,
             "static_sheet_total_count": total_static_sheet_rows,
             "categorized_sheets_counts": categorized_counts
         }
-
