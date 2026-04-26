@@ -28,14 +28,18 @@ def create_orders_from_wc_data(db: Session, wc_orders_data: List[Dict[str, Any]]
     existing_orders_map = {o.order_id: o for o in db.query(models.Order).filter(models.Order.order_id.in_(order_ids_in_batch)).all()}
 
     for wc_order in wc_orders_data:
-        if not wc_order.get('id'):
+        order_id = wc_order.get('id')
+        if not order_id:
             continue
 
-        db_order = existing_orders_map.get(wc_order['id'])
+        # Check if it already exists in the map (either from DB or added in this batch)
+        db_order = existing_orders_map.get(order_id)
 
         if not db_order:
-            db_order = models.Order(order_id=wc_order.get('id'))
+            db_order = models.Order(order_id=order_id)
             db.add(db_order)
+            # Add to the map so it's found if it appears again in the same batch
+            existing_orders_map[order_id] = db_order
 
         db_order.status = wc_order.get('status')
         db_order.currency = wc_order.get('currency')
