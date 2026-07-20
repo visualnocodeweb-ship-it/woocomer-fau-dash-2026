@@ -19,7 +19,7 @@ import CompletedOrdersCard from '../components/CompletedOrdersCard';
 import PermitKpiCard from '../components/PermitKpiCard';
 import DailyCountsChart from '../components/DailyCountsChart';
 import MonthlyCountsChart from '../components/MonthlyCountsChart';
-import CategoriesChart from '../components/CategoriesChart';
+import PermitTypesChart from '../components/PermitTypesChart';
 import RegionsChart from '../components/RegionsChart';
 import TotalRevenueCard from '../components/TotalRevenueCard';
 import DailyRevenueChart from '../components/DailyRevenueChart';
@@ -359,7 +359,7 @@ function DashboardPage() {
             </TabPanel>
 
             <TabPanel value={value} index={1}>
-                <CategoriesChart data={permitTypesData} loading={permitTypesLoading} title="Permisos por Tipo" />
+                <PermitTypesChart data={permitTypesData} loading={permitTypesLoading} title="Permisos por Tipo" />
                 <Grid container spacing={3} sx={{ mt: 2 }}>
                     {permitTypesData.map((category) => (
                         <Grid item xs={12} sm={6} md={4} key={category.name}>
