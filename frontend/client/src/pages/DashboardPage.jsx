@@ -182,7 +182,7 @@ function DashboardPage() {
         kpiDiscapacidadCount === null ||
         conCargoCount === null;
 
-    const permitTypesData = React.useMemo(() => {
+    const permitTypesBreakdownData = React.useMemo(() => {
         const excludedName =
             'Residentes mayores de 65 años, jubilados, menores hasta 12 años y personas con discapacidad';
 
@@ -190,19 +190,28 @@ function DashboardPage() {
             (category) => category.value > 0 && category.name !== excludedName
         );
 
-        const automatedCategories = [
-            { name: 'Con Cargo', value: conCargoCount ?? 0 },
-            { name: 'Total Sin Cargo', value: totalSinCargoCount ?? 0 },
+        const wooSum = wooCategories.reduce((sum, category) => sum + category.value, 0);
+        const items = [...wooCategories];
+
+        if (conCargoCount !== null && wooSum < conCargoCount) {
+            items.push({
+                name: 'Otros permisos con cargo',
+                value: conCargoCount - wooSum,
+            });
+        }
+
+        const sinCargoItems = [
             { name: 'Sin Cargo (automatizado)', value: kpiSinCargoCount ?? 0 },
             { name: 'Sin Cargo Nuevos (automatizado)', value: kpiSinCargoNuevosCount ?? 0 },
             { name: 'Discapacidad (automatizado)', value: kpiDiscapacidadCount ?? 0 },
         ].filter((category) => category.value > 0);
 
-        return [...wooCategories, ...automatedCategories].sort((a, b) => b.value - a.value);
+        return [...items, ...sinCargoItems]
+            .filter((category) => category.value > 0)
+            .sort((a, b) => b.value - a.value);
     }, [
         categoriesData,
         conCargoCount,
-        totalSinCargoCount,
         kpiSinCargoCount,
         kpiSinCargoNuevosCount,
         kpiDiscapacidadCount,
@@ -359,9 +368,14 @@ function DashboardPage() {
             </TabPanel>
 
             <TabPanel value={value} index={1}>
-                <PermitTypesChart data={permitTypesData} loading={permitTypesLoading} title="Permisos por Tipo" />
+                <PermitTypesChart
+                    data={permitTypesBreakdownData}
+                    loading={permitTypesLoading}
+                    title="Permisos por Tipo"
+                    officialTotal={totalPermitsCount}
+                />
                 <Grid container spacing={3} sx={{ mt: 2 }}>
-                    {permitTypesData.map((category) => (
+                    {permitTypesBreakdownData.map((category) => (
                         <Grid item xs={12} sm={6} md={4} key={category.name}>
                             <CategoryStatCard
                                 name={category.name}
