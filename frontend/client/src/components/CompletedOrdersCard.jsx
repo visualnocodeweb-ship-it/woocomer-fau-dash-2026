@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Paper, Box, Typography, CircularProgress, Grid } from '@mui/material';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
+import { JUBILADOS_PRODUCT_NAME } from '../constants/permits';
 
 function CompletedOrdersCard() {
   const [completedCount, setCompletedCount] = useState(null);
@@ -9,17 +10,21 @@ function CompletedOrdersCard() {
 
   const fetchCompletedOrders = async () => {
     try {
-      const [dbResponse, sheetsResponse] = await Promise.all([
+      const jubiladosParams = new URLSearchParams({
+        before_date: '2025-10-15',
+        line_item_name: JUBILADOS_PRODUCT_NAME,
+        total: 0,
+      });
+
+      const [recentResponse, jubiladosResponse] = await Promise.all([
         axios.get(`${API_URL}/api/orders/count`),
-        axios.get(`${API_URL}/api/sheets-counts`)
+        axios.get(`${API_URL}/api/orders/count?${jubiladosParams.toString()}`),
       ]);
-      
-      const dbCount = dbResponse.data.total_completed || 0;
-      const staticCount = sheetsResponse.data.static_sheet_total_count || 0;
-      const otherSheetsCount = sheetsResponse.data.categorized_sheets_counts?.["Otros Permisos Google Sheets"] || 0;
-      const discapacidadCount = sheetsResponse.data.categorized_sheets_counts?.["Permisos Discapacidad"] || 0;
-      
-      setCompletedCount(dbCount + staticCount + otherSheetsCount + discapacidadCount);
+
+      const recentCount = recentResponse.data.total_completed || 0;
+      const jubiladosCount = jubiladosResponse.data.total_completed || 0;
+
+      setCompletedCount(recentCount + jubiladosCount);
     } catch (error) {
       console.error('Error fetching completed orders count:', error);
       setCompletedCount('Error');
@@ -28,7 +33,7 @@ function CompletedOrdersCard() {
 
   useEffect(() => {
     fetchCompletedOrders();
-    const intervalId = setInterval(fetchCompletedOrders, 120000); // Update every 2 minutes
+    const intervalId = setInterval(fetchCompletedOrders, 120000);
     return () => clearInterval(intervalId);
   }, []);
 

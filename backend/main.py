@@ -425,7 +425,12 @@ def get_custom_report(request: schemas.DateRangeRequest, db: Session = Depends(g
     
 @app.get("/api/orders/count")
 def get_completed_orders_count(after_date: Optional[date] = None, before_date: Optional[date] = None, line_item_name: Optional[str] = None, total: Optional[float] = None, db: Session = Depends(get_db)):
-    start_dt = datetime.combine(after_date, datetime.min.time()) if after_date else OFFICIAL_START_DATE
+    if after_date is not None:
+        start_dt = datetime.combine(after_date, datetime.min.time())
+    elif before_date is not None:
+        start_dt = None
+    else:
+        start_dt = OFFICIAL_START_DATE
     count = crud.get_orders_count(db, status='completed', after_date=start_dt, before_date=before_date, line_item_name=line_item_name, total=total)
     return {"total_completed": count}
     

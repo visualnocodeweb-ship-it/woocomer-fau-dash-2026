@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Paper, Box, Typography, CircularProgress, Grid } from '@mui/material';
 import ElderlyIcon from '@mui/icons-material/Elderly';
+import { JUBILADOS_PRODUCT_NAME } from '../constants/permits';
 
 function JubiladoOrdersCard() {
   const [count, setCount] = useState(null);
@@ -11,21 +12,12 @@ function JubiladoOrdersCard() {
     try {
       const params = new URLSearchParams({
         before_date: '2025-10-15',
-        line_item_name: 'Permiso residentes país mayores de 65 años, jubilados y pensionados',
-        total: 0
+        line_item_name: JUBILADOS_PRODUCT_NAME,
+        total: 0,
       });
-      
-      const [dbResponse, sheetsResponse] = await Promise.all([
-        axios.get(`${API_URL}/api/orders/count?${params.toString()}`),
-        axios.get(`${API_URL}/api/sheets-counts`)
-      ]);
 
-      const dbCount = dbResponse.data.total_completed || 0;
-      const staticCount = sheetsResponse.data.static_sheet_total_count || 0;
-      const otherSheetsCount = sheetsResponse.data.categorized_sheets_counts?.["Otros Permisos Google Sheets"] || 0;
-      const jubiladosCount = sheetsResponse.data.categorized_sheets_counts?.["jubilados"] || 0;
-      
-      setCount(dbCount + staticCount + otherSheetsCount + jubiladosCount);
+      const response = await axios.get(`${API_URL}/api/orders/count?${params.toString()}`);
+      setCount(response.data.total_completed || 0);
     } catch (error) {
       console.error('Error fetching jubilado orders count:', error);
       setCount('Error');
@@ -34,7 +26,7 @@ function JubiladoOrdersCard() {
 
   useEffect(() => {
     fetchJubiladoOrders();
-    const intervalId = setInterval(fetchJubiladoOrders, 120000); // Update every 2 minutes
+    const intervalId = setInterval(fetchJubiladoOrders, 120000);
     return () => clearInterval(intervalId);
   }, []);
 
