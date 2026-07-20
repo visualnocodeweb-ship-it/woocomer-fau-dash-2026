@@ -16,6 +16,7 @@ from dotenv import load_dotenv # Added
 import os # Added
 
 from backend.google_sheets_service import GoogleSheetsService
+from backend.external_permits_service import sync_external_permits, get_external_permits_stats
 
 # Load environment variables from .env file at the application entry point
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '.env')) # Added
@@ -23,6 +24,7 @@ load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '.env')) # Added
 # --- Constants ---
 SYNC_INTERVAL_SECONDS = 120  # 2 minutes
 SHEETS_SYNC_INTERVAL_SECONDS = 120 # 2 minutes for sheets sync
+EXTERNAL_PERMITS_SYNC_INTERVAL_SECONDS = 120
 OFFICIAL_START_DATE = datetime(2025, 10, 15)
 
 # Global variable to store sheets data
@@ -183,6 +185,20 @@ def run_google_sheets_sync_periodically():
         logging.info(f"Next automatic Google Sheets sync in {SHEETS_SYNC_INTERVAL_SECONDS} seconds.")
         time.sleep(SHEETS_SYNC_INTERVAL_SECONDS)
 
+def sync_external_permits_job():
+    logging.warning("Starting background external permits sync job...")
+    try:
+        sync_external_permits()
+    except Exception as exc:
+        logging.error(f"Error during external permits sync: {exc}", exc_info=True)
+    logging.warning("Background external permits sync job has finished its execution.")
+
+def run_external_permits_sync_periodically():
+    while True:
+        sync_external_permits_job()
+        logging.info(f"Next automatic external permits sync in {EXTERNAL_PERMITS_SYNC_INTERVAL_SECONDS} seconds.")
+        time.sleep(EXTERNAL_PERMITS_SYNC_INTERVAL_SECONDS)
+
 @app.on_event("startup")
 def startup_event():
     """
@@ -211,6 +227,11 @@ def startup_event():
     google_sheets_initial_thread.start()
     google_sheets_sync_thread = threading.Thread(target=run_google_sheets_sync_periodically, daemon=True)
     google_sheets_sync_thread.start()
+
+    external_permits_initial_thread = threading.Thread(target=sync_external_permits_job, daemon=True)
+    external_permits_initial_thread.start()
+    external_permits_sync_thread = threading.Thread(target=run_external_permits_sync_periodically, daemon=True)
+    external_permits_sync_thread.start()
 
 
 # --- API Routes ---
@@ -243,6 +264,19 @@ def force_sync_sheets():
     t = threading.Thread(target=sync_google_sheets_job, daemon=True)
     t.start()
     return {"message": "Sincronización de Google Sheets iniciada en segundo plano."}
+
+@app.get("/api/external-permits/stats")
+def get_external_permits_stats_endpoint():
+    """
+    Returns cached permit stats from external sin-cargo and discapacidad apps.
+    """
+    return get_external_permits_stats()
+
+@app.post("/api/sync-external-permits")
+def force_sync_external_permits():
+    t = threading.Thread(target=sync_external_permits_job, daemon=True)
+    t.start()
+    return {"message": "Sincronización de permisos externos iniciada en segundo plano."}
 
 @app.get("/api/combined-category-stats")
 def get_combined_category_stats(db: Session = Depends(get_db)):

@@ -16,7 +16,7 @@ import {
 } from '@mui/material';
 import MenuIcon from '@mui/icons-material/Menu';
 import CompletedOrdersCard from '../components/CompletedOrdersCard';
-import JubiladoOrdersCard from '../components/JubiladoOrdersCard';
+import PermitKpiCard from '../components/PermitKpiCard';
 import DailyCountsChart from '../components/DailyCountsChart';
 import MonthlyCountsChart from '../components/MonthlyCountsChart';
 import CategoriesChart from '../components/CategoriesChart';
@@ -30,6 +30,9 @@ import SheetsCountButton from '../components/SheetsCountButton';
 import CategoryStatCard from '../components/CategoryStatCard';
 import axios from 'axios';
 import { JUBILADOS_PRODUCT_NAME } from '../constants/permits';
+import ElderlyIcon from '@mui/icons-material/Elderly';
+import SyncIcon from '@mui/icons-material/Sync';
+import AccessibleIcon from '@mui/icons-material/Accessible';
 
 function TabPanel(props) {
   const { children, value, index, ...other } = props;
@@ -73,6 +76,8 @@ function DashboardPage() {
     const [sheetsCountsLoading, setSheetsCountsLoading] = useState(true);
     const [kpiRecentCount, setKpiRecentCount] = useState(null);
     const [kpiSinCargoCount, setKpiSinCargoCount] = useState(null);
+    const [kpiSinCargoNuevosCount, setKpiSinCargoNuevosCount] = useState(null);
+    const [kpiDiscapacidadCount, setKpiDiscapacidadCount] = useState(null);
     const [anchorEl, setAnchorEl] = useState(null);
     
     const theme = useTheme();
@@ -129,13 +134,16 @@ function DashboardPage() {
                 total: 0,
             });
 
-            const [recentResponse, sinCargoResponse] = await Promise.all([
+            const [recentResponse, sinCargoResponse, externalResponse] = await Promise.all([
                 axios.get(`${API_URL}/api/orders/count`),
                 axios.get(`${API_URL}/api/orders/count?${sinCargoParams.toString()}`),
+                axios.get(`${API_URL}/api/external-permits/stats`),
             ]);
 
             setKpiRecentCount(recentResponse.data.total_completed || 0);
             setKpiSinCargoCount(sinCargoResponse.data.total_completed || 0);
+            setKpiSinCargoNuevosCount(externalResponse.data.sin_cargo_nuevos?.total_enviados || 0);
+            setKpiDiscapacidadCount(externalResponse.data.discapacidad?.total_enviados || 0);
         } catch (error) {
             console.error('Error fetching KPI counts:', error);
         }
@@ -148,8 +156,11 @@ function DashboardPage() {
     }, []);
 
     const totalPermitsCount =
-        kpiRecentCount !== null && kpiSinCargoCount !== null
-            ? kpiRecentCount + kpiSinCargoCount
+        kpiRecentCount !== null &&
+        kpiSinCargoCount !== null &&
+        kpiSinCargoNuevosCount !== null &&
+        kpiDiscapacidadCount !== null
+            ? kpiRecentCount + kpiSinCargoCount + kpiSinCargoNuevosCount + kpiDiscapacidadCount
             : null;
 
     const handleChange = (event, newValue) => setValue(newValue);
@@ -245,11 +256,30 @@ function DashboardPage() {
             <TabPanel value={value} index={0}>
                 {/* KPI Cards Row */}
                 <Grid container spacing={4} sx={{ mb: 4 }}>
-                    <Grid item xs={12} sm={6} md={6} sx={{ minWidth: 0 }}>
+                    <Grid item xs={12} sm={6} lg={3} sx={{ minWidth: 0 }}>
                         <CompletedOrdersCard count={totalPermitsCount} />
                     </Grid>
-                    <Grid item xs={12} sm={6} md={6} sx={{ minWidth: 0 }}>
-                        <JubiladoOrdersCard count={kpiSinCargoCount} />
+                    <Grid item xs={12} sm={6} lg={3} sx={{ minWidth: 0 }}>
+                        <PermitKpiCard
+                            label="Sin Cargo (automatizado)"
+                            count={kpiSinCargoCount}
+                            icon={ElderlyIcon}
+                        />
+                    </Grid>
+                    <Grid item xs={12} sm={6} lg={3} sx={{ minWidth: 0 }}>
+                        <PermitKpiCard
+                            label="Sin Cargo Nuevos (automatizado)"
+                            count={kpiSinCargoNuevosCount}
+                            icon={SyncIcon}
+                        />
+                    </Grid>
+                    <Grid item xs={12} sm={6} lg={3} sx={{ minWidth: 0 }}>
+                        <PermitKpiCard
+                            label="Discapacidad (automatizado)"
+                            count={kpiDiscapacidadCount}
+                            icon={AccessibleIcon}
+                            iconBg="#ffffff"
+                        />
                     </Grid>
                 </Grid>
 
