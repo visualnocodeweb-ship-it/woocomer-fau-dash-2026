@@ -22,7 +22,7 @@ load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '.env')) # Added
 
 # --- Constants ---
 SYNC_INTERVAL_SECONDS = 120  # 2 minutes
-SHEETS_SYNC_INTERVAL_SECONDS = 300 # 5 minutes for sheets sync
+SHEETS_SYNC_INTERVAL_SECONDS = 120 # 2 minutes for sheets sync
 OFFICIAL_START_DATE = datetime(2025, 10, 15)
 
 # Global variable to store sheets data
@@ -39,11 +39,21 @@ sheets_sync_data = {
         "Permisos Discapacidad": 0,
         "Residentes mayores de 65 años, jubilados, menores hasta 12 años y personas con discapacidad": 0
     },
+    "latest_free_registrations": [],
+    "live_free_total": 0,
+    "live_free_enviados": 0,
+    "live_free_pendientes": 0,
     "last_sync_time": None
 }
 
-# Initialize GoogleSheetsService
-google_sheets_service = GoogleSheetsService()
+# Lazy init: evita crash al arrancar si SSL de Python falla con Google OAuth
+google_sheets_service = None
+
+def get_google_sheets_service() -> GoogleSheetsService:
+    global google_sheets_service
+    if google_sheets_service is None:
+        google_sheets_service = GoogleSheetsService()
+    return google_sheets_service
 
 app = FastAPI(
     title="WooCommerce Sync API",
@@ -114,6 +124,8 @@ def sync_job():
     try:
         db = SessionLocal()
         perform_sync(db)
+        crud.trigger_jarvis_webhook(db, sheets_sync_data)
+        crud.trigger_external_webhook(db)
     except Exception as e:
         logging.error(f"Error durante la ejecución del background sync job: {e}")
     finally:
@@ -137,12 +149,27 @@ def sync_google_sheets_job():
     global sheets_sync_data
     logging.warning("Background Google Sheets sync job starting a new execution.")
     try:
-        sheets_data = google_sheets_service.get_categorized_sheets_data()
+        sheets_data = get_google_sheets_service().get_categorized_sheets_data()
         sheets_sync_data["updated_sheet_total_count"] = sheets_data["updated_sheet_total_count"]
         sheets_sync_data["static_sheet_total_count"] = sheets_data["static_sheet_total_count"]
         sheets_sync_data["categorized_sheets_counts"] = sheets_data["categorized_sheets_counts"]
+        sheets_sync_data["latest_free_registrations"] = sheets_data.get("latest_free_registrations", [])
+        sheets_sync_data["live_free_total"] = sheets_data.get("live_free_total", 0)
+        sheets_sync_data["live_free_enviados"] = sheets_data.get("live_free_enviados", 0)
+        sheets_sync_data["live_free_pendientes"] = sheets_data.get("live_free_pendientes", 0)
         sheets_sync_data["last_sync_time"] = datetime.now()
-        logging.warning(f"Google Sheets sync completed. Updated Total: {sheets_data['updated_sheet_total_count']}, Static Total: {sheets_data['static_sheet_total_count']}")
+        logging.warning(f"Google Sheets sync completed. Updated Total: {sheets_data['updated_sheet_total_count']}, Static Total: {sheets_data['static_sheet_total_count']}, Live Free Total: {sheets_data.get('live_free_total', 0)}, Live Enviados: {sheets_data.get('live_free_enviados', 0)}, Live Pendientes: {sheets_data.get('live_free_pendientes', 0)}")
+        
+        # Also trigger the webhook to update J.A.R.V.I.S. with new free permits counts and lists!
+        try:
+            db = SessionLocal()
+            crud.trigger_jarvis_webhook(db, sheets_sync_data)
+            crud.trigger_external_webhook(db)
+        except Exception as ex:
+            logging.error(f"Error triggering J.A.R.V.I.S. webhook after Sheets sync: {ex}")
+        finally:
+            if 'db' in locals() and db:
+                db.close()
     except Exception as e:
         logging.error(f"Error during Google Sheets background sync job: {e}")
     logging.warning("Background Google Sheets sync job has finished its execution.")
@@ -161,7 +188,16 @@ def startup_event():
     """
     On startup, run an initial sync and start the background thread.
     """
-    logging.info("El servidor está iniciando. Lanzando la tarea de sincronización en segundo plano...")
+    logging.info("El servidor está iniciando. Creando tablas si no existen...")
+    try:
+        from backend.database import Base, engine
+        import backend.models # Ensure models are loaded so they are registered on Base
+        Base.metadata.create_all(bind=engine)
+        logging.info("Tablas de base de datos creadas/verificadas con éxito.")
+    except Exception as dbe:
+        logging.error(f"Error creando tablas en base de datos: {dbe}")
+        
+    logging.info("Lanzando la tarea de sincronización en segundo plano...")
     # Run initial sync in a separate thread to not block startup
     initial_sync_thread = threading.Thread(target=sync_job, daemon=True)
     initial_sync_thread.start()
@@ -170,7 +206,9 @@ def startup_event():
     background_thread = threading.Thread(target=run_sync_periodically, daemon=True)
     background_thread.start()
 
-    # Start Google Sheets periodic sync
+    # Start Google Sheets periodic sync (also run immediately on startup)
+    google_sheets_initial_thread = threading.Thread(target=sync_google_sheets_job, daemon=True)
+    google_sheets_initial_thread.start()
     google_sheets_sync_thread = threading.Thread(target=run_google_sheets_sync_periodically, daemon=True)
     google_sheets_sync_thread.start()
 
@@ -190,8 +228,21 @@ def get_sheets_counts():
         "updated_sheet_total_count": sheets_sync_data["updated_sheet_total_count"],
         "static_sheet_total_count": sheets_sync_data["static_sheet_total_count"],
         "categorized_sheets_counts": sheets_sync_data["categorized_sheets_counts"],
+        "live_free_total": sheets_sync_data.get("live_free_total", 0),
+        "live_free_enviados": sheets_sync_data.get("live_free_enviados", 0),
+        "live_free_pendientes": sheets_sync_data.get("live_free_pendientes", 0),
         "last_sync_time": sheets_sync_data["last_sync_time"].isoformat() if sheets_sync_data["last_sync_time"] else None
     }
+
+@app.post("/api/sync-sheets")
+def force_sync_sheets():
+    """
+    Manually triggers a Google Sheets sync and updates J.A.R.V.I.S. webhook.
+    """
+    import threading
+    t = threading.Thread(target=sync_google_sheets_job, daemon=True)
+    t.start()
+    return {"message": "Sincronización de Google Sheets iniciada en segundo plano."}
 
 @app.get("/api/combined-category-stats")
 def get_combined_category_stats(db: Session = Depends(get_db)):
@@ -308,6 +359,8 @@ def sync_orders(db: Session = Depends(get_db)):
     Manually triggers an incremental sync of 'completed' orders from WooCommerce.
     """
     total_synced = perform_sync(db)
+    crud.trigger_jarvis_webhook(db, sheets_sync_data)
+    crud.trigger_external_webhook(db)
     return {"message": f"Sincronización manual completada. Total de pedidos nuevos/actualizados: {total_synced}"}
 
 @app.get("/api/orders", response_model=List[schemas.Order])
@@ -433,6 +486,13 @@ def debug_order_dates(db: Session = Depends(get_db)):
     raw_dates_with_ids = [{"order_id": d['order_id'], "date_created": d['date_created'].isoformat()} for d in all_orders_dates]
     
     return {"total_orders": len(all_orders_dates), "unique_months_processed": unique_months, "all_orders_dates_raw": raw_dates_with_ids}
+
+@app.get("/api/permits/categorized-stats")
+def get_external_categorized_stats(db: Session = Depends(get_db)):
+    """
+    Retorna las estadísticas agrupadas y normalizadas por categoría históricas completas.
+    """
+    return crud.get_categorized_permit_stats(db, start_date=None)
 
 # --- Mount Static Files ---
 app.mount("/", StaticFiles(directory=os.path.join(os.path.dirname(__file__), "../frontend/client/dist"), html=True), name="static")

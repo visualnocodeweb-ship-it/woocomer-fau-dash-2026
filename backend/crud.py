@@ -1,3 +1,5 @@
+import os
+import unicodedata
 from sqlalchemy.orm import Session
 from sqlalchemy import func, cast, Date, desc, text
 from backend import models
@@ -70,11 +72,279 @@ def create_orders_from_wc_data(db: Session, wc_orders_data: List[Dict[str, Any]]
 
     try:
         db.commit()
+        # Verificar si hay algún pedido completado en este lote para notificar a J.A.R.V.I.S. y al webhook externo
+        if any(o.status == 'completed' for o in processed_orders):
+            trigger_jarvis_webhook(db)
+            trigger_external_webhook(db)
     except Exception as e:
         db.rollback()
         print(f"Error al confirmar el lote en la base de datos: {e}")
     
     return processed_orders
+
+def trigger_jarvis_webhook(db: Session, sheets_data: Optional[dict] = None):
+    """
+    Recopila las estadísticas de permisos en tiempo real y las envía
+    a J.A.R.V.I.S. de forma asíncrona mediante un hilo de fondo.
+    """
+    try:
+        from datetime import datetime
+        from sqlalchemy import func, desc
+        import threading
+        import requests
+        
+        # Try importing sheets_sync_data if sheets_data is not passed
+        if sheets_data is None:
+            try:
+                from backend.main import sheets_sync_data
+                sheets_data = sheets_sync_data
+            except Exception:
+                pass
+
+        # a) Total de permisos vendidos (todos los completados en la base de datos)
+        permits_sold = db.query(models.Order).filter(
+            models.Order.status == 'completed'
+        ).count()
+        
+        # b) Recaudación total (todos los completados en la base de datos)
+        total_revenue = db.query(func.sum(models.Order.total)).filter(
+            models.Order.status == 'completed'
+        ).scalar() or 0.0
+        
+        # c) Últimos 5 permisos de hoy
+        today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        latest_orders = db.query(models.Order).filter(
+            models.Order.status == 'completed',
+            models.Order.date_created >= today_start
+        ).order_by(desc(models.Order.date_created)).limit(5).all()
+        
+        # Formatear la lista de registros recientes del día
+        latest_registrations = []
+        for order in latest_orders:
+            first_name = order.customer_first_name or ""
+            last_name = order.customer_last_name or ""
+            full_name = f"{first_name} {last_name}".strip()
+            if not full_name:
+                full_name = order.customer_email or "Sin Nombre"
+                
+            latest_registrations.append({
+                "name": full_name,
+                "timestamp": order.date_created.isoformat() if order.date_created else datetime.now().isoformat(),
+                "amount": int(order.total or 0)
+            })
+
+        # d) Permisos sin cargo (Google Sheets)
+        free_permits_total = 0
+        free_permits_enviados = 0
+        free_permits_pendientes = 0
+        free_permits_latest = []
+        if sheets_data:
+            free_permits_total = int(sheets_data.get("live_free_total", 0))
+            free_permits_enviados = int(sheets_data.get("live_free_enviados", 0))
+            free_permits_pendientes = int(sheets_data.get("live_free_pendientes", 0))
+            free_permits_latest = sheets_data.get("latest_free_registrations", [])
+
+        disability_permits_total = 0
+        if sheets_data:
+            cat_counts = sheets_data.get("categorized_sheets_counts") or {}
+            disability_permits_total = int(cat_counts.get("Permisos Discapacidad", 0))
+
+        # Obtener las categorías reales
+        categories = None
+        try:
+            categories_data = get_categorized_permit_stats(db, start_date=None)
+            if categories_data and "categories" in categories_data:
+                categories = categories_data["categories"]
+        except Exception as cat_ex:
+            print(f"[J.A.R.V.I.S. Webhook] Error al calcular categorías para el webhook: {cat_ex}")
+
+        payload = {
+            "permits_sold": int(permits_sold),
+            "total_revenue": int(total_revenue),
+            "latest_registrations": latest_registrations,
+            "free_permits_total": free_permits_total,
+            "free_permits_enviados": free_permits_enviados,
+            "free_permits_pendientes": free_permits_pendientes,
+            "free_permits_latest": free_permits_latest,
+            "disability_permits_total": disability_permits_total,
+            "categories": categories
+        }
+
+        # Ejecución en segundo plano para no demorar la petición original del checkout/sync
+        def send_request():
+            try:
+                webhook_url = os.environ.get(
+                    "JARVIS_WEBHOOK_URL",
+                    "http://localhost:3000/api/permisos/webhook"
+                )
+                r = requests.post(webhook_url, json=payload, timeout=10)
+                print(f"[J.A.R.V.I.S. Webhook] Datos enviados con éxito a {webhook_url}. Código de estado: {r.status_code}")
+            except Exception as req_ex:
+                print(f"[J.A.R.V.I.S. Webhook] Error al conectar con J.A.R.V.I.S.: {req_ex}")
+
+        threading.Thread(target=send_request, daemon=True).start()
+
+    except Exception as e:
+        print(f"[J.A.R.V.I.S. Webhook] Error al preparar estadísticas: {e}")
+
+
+# --- Webhook y Estadísticas de Categorías Externas ---
+
+GROUPS = {
+    "Permisos Ordinarios": [
+        "Permiso residente país temporada",
+        "Permiso 10 días residente país",
+        "Permiso Residente País Menores (13 a 17 años)",
+        "Permiso residente país diario",
+        "Residentes mayores de 65 años, jubilados, menores hasta 12 años y personas con discapacidad",
+        "Permiso no residente país diario",
+        "Permiso 10 días no residente país",
+        "Permiso no residente país temporada"
+    ],
+    "Permisos Adicionales de Trolling o Arrastre": [
+        "Permiso 10 días para pesca de arrastre o trolling",
+        "Permiso para pesca de arrastre o trolling diario",
+        "Permiso para pesca de arrastre o trolling temporada"
+    ],
+    "Permisos Adicionales Zonas Preferenciales": [
+        "Permiso adicional zona preferencial diario",
+        "Permiso adicional 10 días zona preferencial",
+        "Permiso adicional zona preferencial temporada"
+    ],
+    "Otros Permisos": [
+        "Donaciones",
+        "Otros"
+    ]
+}
+
+STANDARD_MAPPING = {
+    "permiso 10 dias residente pais": "Permiso 10 días residente país",
+    "permiso 10 dias no residente pais": "Permiso 10 días no residente país",
+    "permiso residente pais temporada": "Permiso residente país temporada",
+    "permiso residente pais diario": "Permiso residente país diario",
+    "permiso residente pais menores (13 a 17 anos)": "Permiso Residente País Menores (13 a 17 años)",
+    "permiso no residente pais diario": "Permiso no residente país diario",
+    "permiso no residente pais temporada": "Permiso no residente país temporada",
+    "permiso adicional zona preferencial diario": "Permiso adicional zona preferencial diario",
+    "permiso adicional 10 dias zona preferencial": "Permiso adicional 10 días zona preferencial",
+    "permiso adicional zona preferencial temporada": "Permiso adicional zona preferencial temporada",
+    "permiso 10 dias para pesca de arrastre o trolling": "Permiso 10 días para pesca de arrastre o trolling",
+    "permiso para pesca de arrastre o trolling diario": "Permiso para pesca de arrastre o trolling diario",
+    "permiso para pesca de arrastre o trolling temporada": "Permiso para pesca de arrastre o trolling temporada",
+    "residentes mayores de 65 anos, jubilados, menores hasta 12 anos y personas con discapacidad": "Residentes mayores de 65 años, jubilados, menores hasta 12 años y personas con discapacidad",
+    "permiso residente temporada laguna blanca": "Permiso residente temporada Laguna Blanca"
+}
+
+def normalize_name(s: str) -> str:
+    if not s:
+        return ""
+    s_norm = unicodedata.normalize("NFD", s.lower())
+    s_clean = "".join([c for c in s_norm if not unicodedata.combining(c)])
+    return s_clean
+
+# Build normalized to display mapping
+normalized_to_display = {}
+for group_name, items in GROUPS.items():
+    for item in items:
+        normalized_to_display[normalize_name(item)] = item
+
+for k, v in STANDARD_MAPPING.items():
+    normalized_to_display[k] = v
+
+def get_categorized_permit_stats(db: Session, start_date: Optional[datetime] = None) -> Dict[str, Any]:
+    """
+    Agrupa y normaliza los permisos completados en la DB. Si start_date es provisto, filtra desde esa fecha.
+    """
+    query = db.query(
+        models.Order.line_item_name,
+        func.count(models.Order.id)
+    ).filter(
+        models.Order.status == 'completed',
+        models.Order.line_item_name.isnot(None)
+    )
+    if start_date:
+        query = query.filter(models.Order.date_created >= start_date)
+        
+    rows = query.group_by(models.Order.line_item_name).all()
+
+    category_counts = {
+        "Permisos Ordinarios": {},
+        "Permisos Adicionales de Trolling o Arrastre": {},
+        "Permisos Adicionales Zonas Preferenciales": {},
+        "Otros Permisos": {}
+    }
+    
+    total_all = 0
+    
+    for raw_name, count in rows:
+        norm_name = normalize_name(raw_name)
+        display_name = normalized_to_display.get(norm_name, raw_name)
+        
+        matched_group = None
+        for grp, items in GROUPS.items():
+            if display_name in items or norm_name in [normalize_name(x) for x in items]:
+                matched_group = grp
+                break
+        
+        if not matched_group:
+            if "trolling" in norm_name or "arrastre" in norm_name:
+                matched_group = "Permisos Adicionales de Trolling o Arrastre"
+            elif "preferencial" in norm_name:
+                matched_group = "Permisos Adicionales Zonas Preferenciales"
+            elif "residente" in norm_name or "jubilado" in norm_name or "discapacidad" in norm_name or "menor" in norm_name:
+                matched_group = "Permisos Ordinarios"
+            else:
+                matched_group = "Otros Permisos"
+        
+        std_name = normalized_to_display.get(norm_name, display_name)
+        
+        if std_name not in category_counts[matched_group]:
+            category_counts[matched_group][std_name] = 0
+        
+        category_counts[matched_group][std_name] += count
+        total_all += count
+
+    result = {
+        "timestamp": datetime.now().isoformat(),
+        "total_permits": total_all,
+        "categories": {}
+    }
+    
+    for grp, items in category_counts.items():
+        subtotal = sum(items.values())
+        result["categories"][grp] = {
+            "subtotal": subtotal,
+            "items": [{"name": k, "count": v} for k, v in sorted(items.items(), key=lambda x: x[1], reverse=True)]
+        }
+        
+    return result
+
+def trigger_external_webhook(db: Session):
+    """
+    Envía los datos de categorías normalizados al webhook externo si está configurado en las variables de entorno.
+    """
+    webhook_url = os.environ.get("EXTERNAL_PROJECT_WEBHOOK_URL")
+    if not webhook_url:
+        return
+        
+    try:
+        import threading
+        import requests
+        
+        # Sin límite de fecha para reportar el total histórico absoluto (69.023)
+        stats = get_categorized_permit_stats(db, None)
+        
+        def send_request():
+            try:
+                headers = {"Content-Type": "application/json"}
+                r = requests.post(webhook_url, json=stats, headers=headers, timeout=10)
+                print(f"[External Webhook] Estadísticas enviadas con éxito a {webhook_url}. Código: {r.status_code}")
+            except Exception as req_ex:
+                print(f"[External Webhook] Error al enviar a {webhook_url}: {req_ex}")
+                
+        threading.Thread(target=send_request, daemon=True).start()
+    except Exception as e:
+        print(f"[External Webhook] Error al preparar estadísticas para el webhook externo: {e}")
 
 def get_orders(db: Session, skip: int = 0, limit: int = 100) -> List[models.Order]:
     """Retrieves a list of Order objects from the database."""
