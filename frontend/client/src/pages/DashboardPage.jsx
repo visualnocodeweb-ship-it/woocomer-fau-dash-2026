@@ -26,13 +26,14 @@ import DailyRevenueChart from '../components/DailyRevenueChart';
 import MonthlyRevenueChart from '../components/MonthlyRevenueChart';
 import LatestOrdersTable from '../components/LatestOrdersTable';
 import ReportGenerator from '../components/ReportGenerator';
-import SheetsCountButton from '../components/SheetsCountButton';
 import CategoryStatCard from '../components/CategoryStatCard';
 import axios from 'axios';
 import { JUBILADOS_PRODUCT_NAME } from '../constants/permits';
 import ElderlyIcon from '@mui/icons-material/Elderly';
 import SyncIcon from '@mui/icons-material/Sync';
 import AccessibleIcon from '@mui/icons-material/Accessible';
+import MoneyOffIcon from '@mui/icons-material/MoneyOff';
+import PaidIcon from '@mui/icons-material/Paid';
 
 function TabPanel(props) {
   const { children, value, index, ...other } = props;
@@ -163,6 +164,52 @@ function DashboardPage() {
             ? kpiRecentCount + kpiSinCargoCount + kpiSinCargoNuevosCount + kpiDiscapacidadCount
             : null;
 
+    const totalSinCargoCount =
+        kpiSinCargoCount !== null &&
+        kpiSinCargoNuevosCount !== null &&
+        kpiDiscapacidadCount !== null
+            ? kpiSinCargoCount + kpiSinCargoNuevosCount + kpiDiscapacidadCount
+            : null;
+
+    const conCargoCount =
+        totalPermitsCount !== null && totalSinCargoCount !== null
+            ? totalPermitsCount - totalSinCargoCount
+            : null;
+
+    const kpiLoading =
+        kpiSinCargoCount === null ||
+        kpiSinCargoNuevosCount === null ||
+        kpiDiscapacidadCount === null ||
+        conCargoCount === null;
+
+    const permitTypesData = React.useMemo(() => {
+        const excludedName =
+            'Residentes mayores de 65 años, jubilados, menores hasta 12 años y personas con discapacidad';
+
+        const wooCategories = categoriesData.filter(
+            (category) => category.value > 0 && category.name !== excludedName
+        );
+
+        const automatedCategories = [
+            { name: 'Con Cargo', value: conCargoCount ?? 0 },
+            { name: 'Total Sin Cargo', value: totalSinCargoCount ?? 0 },
+            { name: 'Sin Cargo (automatizado)', value: kpiSinCargoCount ?? 0 },
+            { name: 'Sin Cargo Nuevos (automatizado)', value: kpiSinCargoNuevosCount ?? 0 },
+            { name: 'Discapacidad (automatizado)', value: kpiDiscapacidadCount ?? 0 },
+        ].filter((category) => category.value > 0);
+
+        return [...wooCategories, ...automatedCategories].sort((a, b) => b.value - a.value);
+    }, [
+        categoriesData,
+        conCargoCount,
+        totalSinCargoCount,
+        kpiSinCargoCount,
+        kpiSinCargoNuevosCount,
+        kpiDiscapacidadCount,
+    ]);
+
+    const permitTypesLoading = categoriesLoading || kpiLoading;
+
     const handleChange = (event, newValue) => setValue(newValue);
     const handleMenuOpen = (event) => setAnchorEl(event.currentTarget);
     const handleMenuClose = () => setAnchorEl(null);
@@ -256,24 +303,41 @@ function DashboardPage() {
             <TabPanel value={value} index={0}>
                 {/* KPI Cards Row */}
                 <Grid container spacing={4} sx={{ mb: 4 }}>
-                    <Grid item xs={12} sm={6} lg={3} sx={{ minWidth: 0 }}>
+                    <Grid item xs={12} sm={6} lg={4} sx={{ minWidth: 0 }}>
                         <CompletedOrdersCard count={totalPermitsCount} />
                     </Grid>
-                    <Grid item xs={12} sm={6} lg={3} sx={{ minWidth: 0 }}>
+                    <Grid item xs={12} sm={6} lg={4} sx={{ minWidth: 0 }}>
+                        <PermitKpiCard
+                            label="Con Cargo"
+                            count={conCargoCount}
+                            icon={PaidIcon}
+                            iconBg="#bcff00"
+                            valueColor="#ffffff"
+                            labelColor="primary.main"
+                        />
+                    </Grid>
+                    <Grid item xs={12} sm={6} lg={4} sx={{ minWidth: 0 }}>
+                        <PermitKpiCard
+                            label="Total Sin Cargo"
+                            count={totalSinCargoCount}
+                            icon={MoneyOffIcon}
+                        />
+                    </Grid>
+                    <Grid item xs={12} sm={6} lg={4} sx={{ minWidth: 0 }}>
                         <PermitKpiCard
                             label="Sin Cargo (automatizado)"
                             count={kpiSinCargoCount}
                             icon={ElderlyIcon}
                         />
                     </Grid>
-                    <Grid item xs={12} sm={6} lg={3} sx={{ minWidth: 0 }}>
+                    <Grid item xs={12} sm={6} lg={4} sx={{ minWidth: 0 }}>
                         <PermitKpiCard
                             label="Sin Cargo Nuevos (automatizado)"
                             count={kpiSinCargoNuevosCount}
                             icon={SyncIcon}
                         />
                     </Grid>
-                    <Grid item xs={12} sm={6} lg={3} sx={{ minWidth: 0 }}>
+                    <Grid item xs={12} sm={6} lg={4} sx={{ minWidth: 0 }}>
                         <PermitKpiCard
                             label="Discapacidad (automatizado)"
                             count={kpiDiscapacidadCount}
@@ -295,31 +359,17 @@ function DashboardPage() {
             </TabPanel>
 
             <TabPanel value={value} index={1}>
-                <CategoriesChart data={categoriesData} loading={categoriesLoading} title="Permisos por Tipo" />
-                <Box sx={{ mt: 4 }}>
-                    <SheetsCountButton 
-                        data={sheetsCountsData} 
-                        loading={sheetsCountsLoading} 
-                        consolidatedCategoryName="Residentes mayores de 65 años, jubilados, menores hasta 12 años y personas con discapacidad" 
-                    />
-                </Box>
+                <CategoriesChart data={permitTypesData} loading={permitTypesLoading} title="Permisos por Tipo" />
                 <Grid container spacing={3} sx={{ mt: 2 }}>
-                    {categoriesData.map((category, index) => (
-                        category.name !== "Residentes mayores de 65 años, jubilados, menores hasta 12 años y personas con discapacidad" && (
-                            <Grid item xs={12} sm={6} md={4} key={index}>
-                                <CategoryStatCard name={category.name} value={category.value} loading={categoriesLoading} />
-                            </Grid>
-                        )
-                    ))}
-                    {sheetsCountsData?.categorized_sheets_counts && (
-                        <Grid item xs={12} sm={6} md={4} key="permisos-discapacidad">
-                            <CategoryStatCard 
-                                name="Permisos Discapacidad" 
-                                value={sheetsCountsData.categorized_sheets_counts["Permisos Discapacidad"] || 0} 
-                                loading={sheetsCountsLoading} 
+                    {permitTypesData.map((category) => (
+                        <Grid item xs={12} sm={6} md={4} key={category.name}>
+                            <CategoryStatCard
+                                name={category.name}
+                                value={category.value}
+                                loading={permitTypesLoading}
                             />
                         </Grid>
-                    )}
+                    ))}
                 </Grid>
             </TabPanel>
 
