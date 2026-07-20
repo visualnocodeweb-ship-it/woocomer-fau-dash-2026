@@ -10,20 +10,21 @@ import {
   IconButton,
   Alert
 } from '@mui/material';
-import { Visibility, VisibilityOff, Lock, Person } from '@mui/icons-material';
+import { Visibility, VisibilityOff, Lock } from '@mui/icons-material';
+
+const ACCESS_PASSWORD = 'adminfauna@nqn';
 
 function LoginPage({ onLogin }) {
-  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (username === 'admin' && password === 'admin321') {
+    if (password === ACCESS_PASSWORD) {
       onLogin();
     } else {
-      setError('Credenciales incorrectas');
+      setError('Clave incorrecta');
     }
   };
 
@@ -61,7 +62,7 @@ function LoginPage({ onLogin }) {
             PESCA • DASH
           </Typography>
           <Typography variant="body2" sx={{ color: 'text.secondary', mb: 4 }}>
-            Inicia sesión para continuar
+            Ingresá la clave para continuar
           </Typography>
 
           {error && (
@@ -74,26 +75,12 @@ function LoginPage({ onLogin }) {
             <TextField
               fullWidth
               variant="outlined"
-              placeholder="Usuario"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              sx={{ mb: 2 }}
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <Person sx={{ color: 'text.secondary' }} />
-                  </InputAdornment>
-                ),
-              }}
-            />
-            <TextField
-              fullWidth
-              variant="outlined"
               type={showPassword ? 'text' : 'password'}
-              placeholder="Contraseña"
+              placeholder="Clave"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               sx={{ mb: 4 }}
+              autoFocus
               InputProps={{
                 startAdornment: (
                   <InputAdornment position="start">
