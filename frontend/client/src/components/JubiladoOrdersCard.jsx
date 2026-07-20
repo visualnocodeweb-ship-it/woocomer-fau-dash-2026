@@ -4,31 +4,34 @@ import { Paper, Box, Typography, CircularProgress, Grid } from '@mui/material';
 import ElderlyIcon from '@mui/icons-material/Elderly';
 import { JUBILADOS_PRODUCT_NAME } from '../constants/permits';
 
-function JubiladoOrdersCard() {
-  const [count, setCount] = useState(null);
+function JubiladoOrdersCard({ count: externalCount }) {
+  const [internalCount, setInternalCount] = useState(null);
   const API_URL = import.meta.env.VITE_API_URL || '';
-
-  const fetchJubiladoOrders = async () => {
-    try {
-      const params = new URLSearchParams({
-        before_date: '2025-10-15',
-        line_item_name: JUBILADOS_PRODUCT_NAME,
-        total: 0,
-      });
-
-      const response = await axios.get(`${API_URL}/api/orders/count?${params.toString()}`);
-      setCount(response.data.total_completed || 0);
-    } catch (error) {
-      console.error('Error fetching jubilado orders count:', error);
-      setCount('Error');
-    }
-  };
+  const displayCount = externalCount ?? internalCount;
 
   useEffect(() => {
-    fetchJubiladoOrders();
-    const intervalId = setInterval(fetchJubiladoOrders, 120000);
+    if (externalCount !== undefined) return;
+
+    const fetchSinCargoOrders = async () => {
+      try {
+        const params = new URLSearchParams({
+          before_date: '2025-10-15',
+          line_item_name: JUBILADOS_PRODUCT_NAME,
+          total: 0,
+        });
+
+        const response = await axios.get(`${API_URL}/api/orders/count?${params.toString()}`);
+        setInternalCount(response.data.total_completed || 0);
+      } catch (error) {
+        console.error('Error fetching sin cargo orders count:', error);
+        setInternalCount('Error');
+      }
+    };
+
+    fetchSinCargoOrders();
+    const intervalId = setInterval(fetchSinCargoOrders, 120000);
     return () => clearInterval(intervalId);
-  }, []);
+  }, [externalCount, API_URL]);
 
   return (
     <Paper 
@@ -65,15 +68,15 @@ function JubiladoOrdersCard() {
                     variant="caption" 
                     sx={{ fontWeight: 700, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '1.5px' }}
                 >
-                  Jubilados (Sin cargo)
+                  Sin Cargo (automatizado)
                 </Typography>
                 <Typography 
                     variant="h3" 
                     component="div" 
                     sx={{ fontWeight: 900, color: '#bcff00', mt: 0.5, lineHeight: 1 }}
                 >
-                  {count !== null && count !== 'Error'
-                      ? count.toLocaleString('es-AR')
+                  {displayCount !== null && displayCount !== 'Error'
+                      ? displayCount.toLocaleString('es-AR')
                       : <CircularProgress color="inherit" size={28} />}
                 </Typography>
             </Grid>
